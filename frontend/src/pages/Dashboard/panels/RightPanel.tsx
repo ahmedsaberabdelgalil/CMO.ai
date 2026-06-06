@@ -9,6 +9,7 @@ import { SuggestionList } from "../components/SuggestionList";
 import { TextRightAside } from "./TextRightAside";
 import { ImageRightAside } from "./ImageRightAside";
 import { VideoRightAside } from "./VideoRightAside";
+import { CalendarRightAside } from "./CalendarRightAside";
 import { AnalyticsRightAside } from "./AnalyticsRightAside";
 import type { ImageAgentResponse, VideoAgentResponse } from "../../../types/api";
 
@@ -21,6 +22,12 @@ export function RightPanel({
   onDemoAction,
   onCalendar14,
   onCalendarBalance,
+  onCalendarFindGaps,
+  calendarChatMessages,
+  calendarDraft,
+  onCalendarDraftChange,
+  onCalendarChatSend,
+  onMarketQuickAction,
   onTextLi,
   onTextEmail,
   onTextHooks,
@@ -53,6 +60,12 @@ export function RightPanel({
   onDemoAction: (agentId: AgentId, action: string) => void;
   onCalendar14: () => void;
   onCalendarBalance: () => void;
+  onCalendarFindGaps: () => void;
+  calendarChatMessages: ChatMessage[];
+  calendarDraft: string;
+  onCalendarDraftChange: (v: string) => void;
+  onCalendarChatSend: (message?: string) => void;
+  onMarketQuickAction: (message: string) => void;
   onTextLi: () => void;
   onTextEmail: () => void;
   onTextHooks: () => void;
@@ -104,7 +117,10 @@ export function RightPanel({
         void onCalendarBalance();
         return;
       }
-      onDemoAction("calendar", action);
+      if (action === "Find calendar gaps") {
+        onCalendarFindGaps();
+        return;
+      }
       return;
     }
     if (activeAgent.id === "image") {
@@ -140,7 +156,7 @@ export function RightPanel({
       return;
     }
     if (activeAgent.id === "market") {
-      onDemoAction("market", action);
+      onMarketQuickAction(action);
       return;
     }
     if (activeAgent.id === "brand") {
@@ -307,6 +323,24 @@ export function RightPanel({
     );
   }
 
+  if (activeAgent.id === "calendar") {
+    return (
+      <CalendarRightAside
+        activeAgent={activeAgent}
+        campaignName={campaign?.name ?? "-"}
+        messages={calendarChatMessages}
+        draft={calendarDraft}
+        onDraftChange={onCalendarDraftChange}
+        onSend={onCalendarChatSend}
+        suggestions={suggestions}
+        onGenerate14={onCalendar14}
+        onBalance={onCalendarBalance}
+        onFindGaps={onCalendarFindGaps}
+        busyAction={busyAction}
+      />
+    );
+  }
+
   if (activeAgent.id === "video") {
     return (
       <VideoRightAside
@@ -352,11 +386,6 @@ export function RightPanel({
   );
 
   const runQuick = (label: string) => {
-    if (activeAgent.id === "calendar") {
-      if (label === "Generate next 14 days") void onCalendar14();
-      if (label === "Balance channels") void onCalendarBalance();
-      if (label === "Find calendar gaps") onDemoAction("calendar", label);
-    }
     if (activeAgent.id === "video") {
       if (label === "Write short video script") onVideoScript();
       if (label === "Create storyboard") onVideoStoryboard();
@@ -365,8 +394,12 @@ export function RightPanel({
   };
 
   const isBusy = (label: string) => {
+    if (label === "Generate marketing strategy") {
+      return busyAction === "marketgen" || busyAction === "marketchat";
+    }
     if (label === "Generate next 14 days") return busyAction === "cal14";
-    if (label === "Balance channels") return busyAction === "channels";
+    if (label === "Balance channels") return busyAction === "calbalance";
+    if (label === "Find calendar gaps") return busyAction === "calgaps";
     if (label === "Write LinkedIn posts") return busyAction === "li";
     if (label === "Draft email sequence") return busyAction === "email";
     if (label === "Create ad hooks") return busyAction === "hooks";
@@ -407,21 +440,6 @@ export function RightPanel({
         <div className="p-4 border-t border-white/10">
           <div className="grid gap-2 mb-3">
             {nextActions.map((action) => {
-              if (
-                activeAgent.id === "calendar" &&
-                action === "Find calendar gaps"
-              ) {
-                return (
-                  <button
-                    key={action}
-                    type="button"
-                    onClick={() => runQuick(action)}
-                    className="px-3 py-2 text-xs text-left transition border rounded-md border-white/10 text-white/70 hover:border-neonBlue/60 hover:text-white"
-                  >
-                    {action}
-                  </button>
-                );
-              }
               if (
                 activeAgent.id === "image" &&
                 action === "Review visual consistency"

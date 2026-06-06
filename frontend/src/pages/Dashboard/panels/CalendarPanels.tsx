@@ -1,5 +1,8 @@
 import { Loader2 } from "lucide-react";
 import type { ChannelBreakdown, ContentCalendarMap } from "../../../types/api";
+import { PANEL_CLASS } from "../constants";
+import { ActionRow } from "../components/ActionRow";
+import { CalendarContentBody } from "../components/CalendarContentBody";
 
 export function CalendarPanels({
   calendarData,
@@ -18,99 +21,60 @@ export function CalendarPanels({
   onBalance: () => void;
   onFindGaps: () => void;
 }) {
+  const isLoading =
+    busyAction === "cal14" ||
+    busyAction === "channels" ||
+    busyAction === "calgaps";
+
   return (
     <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
-      <section className="rounded-md border border-white/10 bg-white/[0.04] p-4">
+      <section className={`${PANEL_CLASS} p-5`}>
         <h2 className="text-2xl font-semibold">Market Calendar</h2>
-        <p className="mt-3 text-sm text-white/70">
-          Calendar planning is available for this campaign. Generate a real
-          content calendar from the backend, balance channels from analytics, or
-          run the demo gap review.
+        <p className="mt-2 text-sm text-white/50">
+          Content schedule from GET /api/v1/content-calendar/calendar
         </p>
+
+        {isLoading ? (
+          <p className="mt-4 flex items-center gap-2 text-sm text-white/60">
+            <Loader2 className="size-4 animate-spin" />
+            Loading calendar data…
+          </p>
+        ) : (
+          <div className="mt-4">
+            <CalendarContentBody
+              calendarData={calendarData}
+              channelsView={channelsView}
+              calendarMessage={calendarMessage}
+            />
+          </div>
+        )}
       </section>
 
-      <section className="rounded-md border border-white/10 bg-white/[0.04] p-4">
+      <section className={`${PANEL_CLASS} p-5`}>
         <p className="text-xs uppercase tracking-[0.16em] text-white/40">
           Current focus
         </p>
-        <div className="grid gap-2 mt-4">
-          <button
-            type="button"
-            disabled={busyAction === "cal14"}
+        <div className="mt-4 grid gap-2">
+          <ActionRow
+            label="Load calendar"
+            loading={busyAction === "cal14"}
             onClick={onGenerate14}
-            className="rounded-md border border-white/10 bg-[#0D1018] px-3 py-2 text-left text-sm text-white/80 transition hover:border-neonBlue/60 disabled:opacity-50"
-          >
-            {busyAction === "cal14" ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" /> Loading...
-              </span>
-            ) : (
-              "Generate next 14 days"
-            )}
-          </button>
-          <button
-            type="button"
-            disabled={busyAction === "channels"}
+          />
+          <ActionRow
+            label="Balance channels"
+            loading={busyAction === "channels"}
             onClick={onBalance}
-            className="rounded-md border border-white/10 bg-[#0D1018] px-3 py-2 text-left text-sm text-white/80 transition hover:border-neonBlue/60 disabled:opacity-50"
-          >
-            {busyAction === "channels" ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" /> Loading...
-              </span>
-            ) : (
-              "Balance channels"
-            )}
-          </button>
-          <button
-            type="button"
+          />
+          <ActionRow
+            label="Find calendar gaps"
+            loading={busyAction === "calgaps"}
             onClick={onFindGaps}
-            className="rounded-md border border-white/10 bg-[#0D1018] px-3 py-2 text-left text-sm text-white/80 transition hover:border-neonBlue/60"
-          >
-            Find calendar gaps
-          </button>
+          />
         </div>
-
-        {calendarMessage ? (
-          <p className="mt-4 text-sm text-amber-200/90">{calendarMessage}</p>
-        ) : null}
-
-        {calendarData ? (
-          <div className="mt-4 space-y-3 overflow-y-auto text-sm max-h-72">
-            {Object.entries(calendarData)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([date, items]) => (
-                <div key={date}>
-                  <p className="font-semibold text-neonBlue">{date}</p>
-                  <ul className="mt-1 list-disc list-inside text-white/70">
-                    {items.map((it) => (
-                      <li key={it.id}>
-                        {it.title} - {it.platform}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-          </div>
-        ) : null}
-
-        {channelsView ? (
-          <div className="mt-4 space-y-2 text-sm">
-            <p className="font-medium text-white/80">Channel breakdown</p>
-            {channelsView.map((row) => (
-              <div
-                key={row.platform}
-                className="rounded border border-white/10 bg-[#0D1018] px-2 py-1.5 text-white/75"
-              >
-                <span className="font-medium">{row.platform}</span>
-                <span className="text-white/50">
-                  {" "}
-                  - reach {row.total_reach}, clicks {row.total_clicks}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <p className="mt-4 text-xs leading-5 text-white/45">
+          Your marketing plan seeds 14 days of posts automatically. Use Load
+          calendar to view scheduled content for this month.
+        </p>
       </section>
     </div>
   );

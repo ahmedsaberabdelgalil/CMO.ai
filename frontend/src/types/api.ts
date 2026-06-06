@@ -299,3 +299,29 @@ export interface VideoAgentResponse {
   video_url?: string | null;
   error_message?: string | null;
 }
+
+export interface MarketingAgentRequest {
+  message: string;
+  campaign_id: number;
+  budget?: number;
+  platforms?: string[];
+  goal?: string;
+  brand_name?: string | null;
+  industry?: string | null;
+  audience?: string | null;
+  product?: string | null;
+}
+
+export interface MarketingAgentResponse {
+  status: string;
+  strategy?: string | null;
+  financial_model?: Record<string, unknown> | null;
+  budget_allocation?: Record<string, unknown> | null;
+  platform_insight?: string | null;
+  decision?: string | null;
+  competitor_insight?: string | null;
+  error_message?: string | null;
+  strategy_id?: number | null;
+  calendar_items_created?: number | null;
+  calendar_ready?: boolean;
+}

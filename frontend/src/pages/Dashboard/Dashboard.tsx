@@ -33,6 +33,7 @@ import {
   getImageAgentStatus,
 } from "../../services/imageAgentService";
 import { generateVideo } from "../../services/videoAgentService";
+import { generateMarketingStrategy } from "../../services/marketingAgentService";
 import { getDashboardUpcoming } from "../../services/dashboardService";
 import type {
   BrandOut,
@@ -42,11 +43,12 @@ import type {
   ContentAgentType,
   ContentCalendarMap,
   TextAgentResponse,
+  ChannelBreakdown,
   ImageAgentResponse,
   ImageAgentStatus,
   ImageAgentPlatform,
   VideoAgentResponse,
-  ChannelBreakdown,
+  MarketingAgentResponse,
 } from "../../types/api";
 
 import { agents, nextActions } from "./constants";
@@ -62,6 +64,7 @@ import { MetricCard } from "./components/MetricCard";
 import { CampaignBrief } from "./components/CampaignBrief";
 import { OrchestratorPanel } from "./panels/OrchestratorPanel";
 import { MarketPlannerPanel } from "./panels/MarketPlannerPanel";
+import type { PlannerFormState } from "./panels/MarketPlannerPanel";
 import { BrandPanels } from "./panels/BrandPanels";
 import { CalendarPanels } from "./panels/CalendarPanels";
 import { TextPanels } from "./panels/TextPanels";
@@ -92,6 +95,7 @@ export default function Dashboard() {
     brand,
     brandAudience,
     registerNewCampaign,
+    refresh: refreshCampaign,
   } = useCampaign();
 
   const [activeAgentId, setActiveAgentId] = useState<AgentId>("orchestrator");
@@ -151,6 +155,8 @@ export default function Dashboard() {
     useState<VideoAgentResponse | null>(null);
   const [videoDraft, setVideoDraft] = useState("");
 
+  const [marketingLastResult, setMarketingLastResult] =
+    useState<MarketingAgentResponse | null>(null);
   const [calendarData, setCalendarData] = useState<ContentCalendarMap | null>(
     null,
   );
@@ -158,6 +164,13 @@ export default function Dashboard() {
   const [channelsView, setChannelsView] = useState<ChannelBreakdown[] | null>(
     null,
   );
+  const [calendarChatMessages, setCalendarChatMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      text: "I can plan launch cadence, spot calendar gaps, and balance content timing for this campaign.",
+    },
+  ]);
+  const [calendarDraft, setCalendarDraft] = useState("");
   const filteredCampaigns = useMemo(() => {
     if (selectedBrandId === "all") return campaigns;
 
@@ -433,9 +446,9 @@ export default function Dashboard() {
       } else if (dashboardCampaign && !dashboardCampaign.strategy_id) {
         items.push({
           id: "strategy-missing",
-          title: "Strategy still missing",
+          title: "Marketing plan needed",
           detail:
-            "Market planning is ready, but this campaign still has no linked strategy record for calendar generation.",
+            "Generate a strategy in Market Planner to link your campaign and populate the content calendar.",
           tone: "info",
           showInBadge: true,
           actionLabel: "Open Planner",
@@ -557,10 +570,132 @@ export default function Dashboard() {
     };
   }, [notificationsOpen]);
 
+  const runMarketingGenerate = useCallback(
+    async (
+      message: string,
+      busyKey: string,
+      options?: {
+        budget?: number;
+        platforms?: string[];
+        goal?: string;
+        brand_name?: string;
+        industry?: string;
+        audience?: string;
+        product?: string;
+      },
+    ) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a brand and campaign in the sidebar before generating a strategy.",
+        );
+        return;
+      }
+
+      setBusyAction(busyKey);
+
+      try {
+        const res = await generateMarketingStrategy({
+          message,
+          campaign_id: dashboardCampaign.id,
+          budget: options?.budget ?? 1000,
+          platforms: options?.platforms ?? ["Instagram", "TikTok"],
+          goal: options?.goal ?? "Brand Awareness",
+          brand_name: options?.brand_name,
+          industry: options?.industry,
+          audience: options?.audience,
+          product: options?.product,
+        });
+        setMarketingLastResult(res);
+
+        if (res.error_message) {
+          showResult("Marketing agent error", res.error_message);
+        } else if (res.strategy?.startsWith("Strategy generation failed:")) {
+          showResult("Marketing agent error", res.strategy!);
+        } else if (res.calendar_ready && res.strategy_id) {
+          await refreshCampaign();
+          setCalendarMessage(null);
+
+          const now = new Date();
+          try {
+            const data = await getContentCalendar({
+              strategy_id: res.strategy_id,
+              month: now.getMonth() + 1,
+              year: now.getFullYear(),
+            });
+            setCalendarData(data);
+            setChannelsView(null);
+          } catch {
+            setCalendarData(null);
+          }
+
+          const count = res.calendar_items_created ?? 14;
+          showResult(
+            "Marketing plan ready",
+            `Strategy linked to this campaign with ${count} scheduled posts. Open the Calendar tab to review your content schedule.`,
+          );
+        }
+      } catch (e) {
+        const err =
+          e instanceof Error ? e.message : "Something went wrong";
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, refreshCampaign, showResult],
+  );
+
+  const handleMarketGenerate = useCallback(
+    (form: PlannerFormState, message: string) => {
+      void runMarketingGenerate(message, "marketgen", {
+        budget: form.budget,
+        platforms: form.platforms,
+        goal: form.mainGoal,
+        brand_name: form.brandName,
+        industry: form.industry,
+        audience: form.targetAudience,
+        product: form.productService,
+      });
+    },
+    [runMarketingGenerate],
+  );
+
+  const handleMarketQuickAction = useCallback(
+    (message: string) => {
+      void runMarketingGenerate(message, "marketchat", {
+        budget: 1000,
+        platforms: ["Instagram", "TikTok"],
+        goal: "Brand Awareness",
+        brand_name: dashboardBrand?.brand_name,
+        industry: dashboardBrand?.industry ?? undefined,
+        audience: dashboardBrandAudience ?? undefined,
+        product:
+          dashboardCampaign?.description?.trim() || dashboardCampaign?.name,
+      });
+    },
+    [
+      dashboardBrand,
+      dashboardBrandAudience,
+      dashboardCampaign,
+      runMarketingGenerate,
+    ],
+  );
+
   const handleCalendarGenerate14 = useCallback(async () => {
-    if (!dashboardCampaign?.strategy_id) {
-      setCalendarMessage("No strategy linked to this campaign yet");
+    if (!dashboardCampaign) {
+      showResult(
+        "Select a campaign",
+        "Choose a campaign before loading the content calendar.",
+      );
+      return;
+    }
+    if (!dashboardCampaign.strategy_id) {
+      setCalendarMessage(
+        "No marketing plan linked yet. Generate a strategy in Market Planner first — it will automatically populate your calendar.",
+      );
       setCalendarData(null);
+      setChannelsView(null);
       return;
     }
 
@@ -574,18 +709,59 @@ export default function Dashboard() {
         month: now.getMonth() + 1,
         year: now.getFullYear(),
       });
-
       setCalendarData(data);
       setChannelsView(null);
+      const count = Object.values(data).reduce((n, items) => n + items.length, 0);
+      setCalendarChatMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text:
+            count === 0
+              ? "No scheduled posts found for this month. Add content items to your strategy schedule."
+              : `Loaded ${count} scheduled post(s) for this month.`,
+        },
+      ]);
     } catch (e) {
-      setCalendarMessage(
-        e instanceof Error ? e.message : "Something went wrong",
-      );
+      const err = e instanceof Error ? e.message : "Something went wrong";
+      setCalendarMessage(err);
       setCalendarData(null);
     } finally {
       setBusyAction(null);
     }
-  }, [dashboardCampaign]);
+  }, [dashboardCampaign, showResult]);
+
+  useEffect(() => {
+    if (activeAgentId !== "calendar") return;
+    if (!dashboardCampaign?.strategy_id) return;
+    if (calendarData !== null || channelsView !== null) return;
+    if (busyAction) return;
+
+    if (
+      calendarMessage?.includes(
+        "No strategy linked to this campaign yet",
+      ) ||
+      calendarMessage?.includes("No marketing plan linked yet")
+    ) {
+      setCalendarMessage(null);
+    }
+
+    void handleCalendarGenerate14();
+  }, [
+    activeAgentId,
+    busyAction,
+    calendarData,
+    calendarMessage,
+    channelsView,
+    dashboardCampaign?.strategy_id,
+    handleCalendarGenerate14,
+  ]);
+
+  useEffect(() => {
+    setCalendarData(null);
+    setChannelsView(null);
+    setCalendarMessage(null);
+  }, [dashboardCampaignId]);
 
   const handleCalendarBalance = useCallback(async () => {
     setBusyAction("channels");
@@ -595,15 +771,50 @@ export default function Dashboard() {
       const rows = await getAnalyticsChannels();
       setChannelsView(rows);
       setCalendarData(null);
+      setCalendarChatMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `Channel breakdown loaded for ${rows.length} platform(s).`,
+        },
+      ]);
     } catch (e) {
-      setCalendarMessage(
-        e instanceof Error ? e.message : "Something went wrong",
-      );
+      const err = e instanceof Error ? e.message : "Something went wrong";
+      setCalendarMessage(err);
       setChannelsView(null);
     } finally {
       setBusyAction(null);
     }
   }, []);
+
+  const handleCalendarFindGaps = useCallback(() => {
+    setBusyAction("calgaps");
+    const msg =
+      "Calendar gap analysis agent is not available yet. Use Generate next 14 days to review scheduled posts, or Balance channels to compare platform performance.";
+    setCalendarMessage(msg);
+    setCalendarChatMessages((prev) => [
+      ...prev,
+      { role: "assistant", text: msg },
+    ]);
+    setBusyAction(null);
+  }, []);
+
+  const handleCalendarChatSend = useCallback(
+    (message = calendarDraft) => {
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      setCalendarDraft("");
+      setCalendarChatMessages((prev) => [
+        ...prev,
+        { role: "user", text: trimmed },
+        {
+          role: "assistant",
+          text: "The content calendar chat agent is coming soon. Use Generate next 14 days or Balance channels for now.",
+        },
+      ]);
+    },
+    [calendarDraft],
+  );
 
   const runTextGenerate = useCallback(
     async (
@@ -1380,6 +1591,10 @@ export default function Dashboard() {
                       campaign={dashboardCampaign}
                       brand={dashboardBrand}
                       brandAudience={dashboardBrandAudience}
+                      busyAction={busyAction}
+                      lastResult={marketingLastResult}
+                      onGenerate={handleMarketGenerate}
+                      onOpenCalendar={() => setActiveAgentId("calendar")}
                     />
                   ) : activeAgentId === "brand" ? (
                     <BrandPanels
@@ -1395,9 +1610,7 @@ export default function Dashboard() {
                       busyAction={busyAction}
                       onGenerate14={handleCalendarGenerate14}
                       onBalance={handleCalendarBalance}
-                      onFindGaps={() =>
-                        handleDemoAgentAction("calendar", "Find calendar gaps")
-                      }
+                      onFindGaps={handleCalendarFindGaps}
                     />
                   ) : activeAgentId === "text" ? (
                     <TextPanels
@@ -1468,6 +1681,12 @@ export default function Dashboard() {
               onDemoAction={handleDemoAgentAction}
               onCalendar14={handleCalendarGenerate14}
               onCalendarBalance={handleCalendarBalance}
+              onCalendarFindGaps={handleCalendarFindGaps}
+              onMarketQuickAction={handleMarketQuickAction}
+              calendarChatMessages={calendarChatMessages}
+              calendarDraft={calendarDraft}
+              onCalendarDraftChange={setCalendarDraft}
+              onCalendarChatSend={handleCalendarChatSend}
               onTextLi={handleTextLinkedIn}
               onTextEmail={handleTextEmail}
               onTextHooks={handleTextHooks}
