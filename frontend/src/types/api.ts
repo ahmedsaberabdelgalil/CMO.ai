@@ -13,23 +13,6 @@ export interface UserOut {
   created_at: string;
 }
 
-export interface MemberOut {
-  user_id: number;
-  name: string;
-  email: string;
-  avatar_url: string | null;
-  role: string;
-  joined_at: string;
-}
-
-export interface TeamOut {
-  id: number;
-  name: string;
-  owner_id: number;
-  members: MemberOut[];
-  created_at: string;
-}
-
 export interface BrandOut {
   id: number;
   brand_name: string;
@@ -88,13 +71,6 @@ export interface DashboardSummary {
   total_reach: number;
   avg_engagement_rate: number;
   scheduled_posts: number;
-}
-
-export interface UpcomingContentItem {
-  title: string;
-  platform: string;
-  scheduled_date: string;
-  status: string;
 }
 
 export interface AIInsight {
@@ -324,4 +300,26 @@ export interface MarketingAgentResponse {
   strategy_id?: number | null;
   calendar_items_created?: number | null;
   calendar_ready?: boolean;
+}
+
+export interface CalendarAgentRequest {
+  message: string;
+  campaign_id: number;
+}
+
+export interface CalendarAgentResponse {
+  status: string;
+  response?: string | null;
+  error_message?: string | null;
+}
+
+export interface AnalyticsAgentRequest {
+  message: string;
+  campaign_id: number;
+}
+
+export interface AnalyticsAgentResponse {
+  status: string;
+  response?: string | null;
+  error_message?: string | null;
 }

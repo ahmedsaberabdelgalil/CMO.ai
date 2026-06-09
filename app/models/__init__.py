@@ -1,6 +1,5 @@
 from app.db.base import Base
 from app.models.user import User
-from app.models.team import Team, TeamMember
 from app.models.brand import Brand
 from app.models.marketing_strategy import MarketingStrategy
 from app.models.content_schedule import ContentSchedule

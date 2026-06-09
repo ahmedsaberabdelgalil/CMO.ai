@@ -20,13 +20,20 @@ export function RightPanel({
   brandAudience,
   nextActions,
   onDemoAction,
-  onCalendar14,
+  onCalendarPlan14,
   onCalendarBalance,
   onCalendarFindGaps,
   calendarChatMessages,
   calendarDraft,
   onCalendarDraftChange,
   onCalendarChatSend,
+  analyticsChatMessages,
+  analyticsDraft,
+  onAnalyticsDraftChange,
+  onAnalyticsChatSend,
+  onAnalyticsSummarize,
+  onAnalyticsWeakFunnel,
+  onAnalyticsBudgetShift,
   onMarketQuickAction,
   onTextLi,
   onTextEmail,
@@ -58,13 +65,20 @@ export function RightPanel({
   brandAudience: string | null;
   nextActions: string[];
   onDemoAction: (agentId: AgentId, action: string) => void;
-  onCalendar14: () => void;
+  onCalendarPlan14: () => void;
   onCalendarBalance: () => void;
   onCalendarFindGaps: () => void;
   calendarChatMessages: ChatMessage[];
   calendarDraft: string;
   onCalendarDraftChange: (v: string) => void;
   onCalendarChatSend: (message?: string) => void;
+  analyticsChatMessages: ChatMessage[];
+  analyticsDraft: string;
+  onAnalyticsDraftChange: (v: string) => void;
+  onAnalyticsChatSend: (message?: string) => void;
+  onAnalyticsSummarize: () => void;
+  onAnalyticsWeakFunnel: () => void;
+  onAnalyticsBudgetShift: () => void;
   onMarketQuickAction: (message: string) => void;
   onTextLi: () => void;
   onTextEmail: () => void;
@@ -109,18 +123,19 @@ export function RightPanel({
       return;
     }
     if (activeAgent.id === "calendar") {
-      if (action === "Generate next 14 days") {
-        void onCalendar14();
+      if (action === "Plan next 14 days" || action === "Generate next 14 days") {
+        onCalendarPlan14();
         return;
       }
       if (action === "Balance channels") {
-        void onCalendarBalance();
+        onCalendarBalance();
         return;
       }
       if (action === "Find calendar gaps") {
         onCalendarFindGaps();
         return;
       }
+      onCalendarChatSend(action);
       return;
     }
     if (activeAgent.id === "image") {
@@ -152,7 +167,19 @@ export function RightPanel({
       return;
     }
     if (activeAgent.id === "analytics") {
-      onDemoAction("analytics", action);
+      if (action === "Summarize performance") {
+        onAnalyticsSummarize();
+        return;
+      }
+      if (action === "Find weak funnel step") {
+        onAnalyticsWeakFunnel();
+        return;
+      }
+      if (action === "Suggest budget shift") {
+        onAnalyticsBudgetShift();
+        return;
+      }
+      onAnalyticsChatSend(action);
       return;
     }
     if (activeAgent.id === "market") {
@@ -299,8 +326,15 @@ export function RightPanel({
       <AnalyticsRightAside
         activeAgent={activeAgent}
         campaignName={campaign?.name ?? "-"}
+        messages={analyticsChatMessages}
+        draft={analyticsDraft}
+        onDraftChange={onAnalyticsDraftChange}
+        onSend={onAnalyticsChatSend}
         suggestions={suggestions}
-        onDemoAction={onDemoAction}
+        onSummarize={onAnalyticsSummarize}
+        onWeakFunnel={onAnalyticsWeakFunnel}
+        onBudgetShift={onAnalyticsBudgetShift}
+        busyAction={busyAction}
       />
     );
   }
@@ -333,7 +367,7 @@ export function RightPanel({
         onDraftChange={onCalendarDraftChange}
         onSend={onCalendarChatSend}
         suggestions={suggestions}
-        onGenerate14={onCalendar14}
+        onPlan14={onCalendarPlan14}
         onBalance={onCalendarBalance}
         onFindGaps={onCalendarFindGaps}
         busyAction={busyAction}
@@ -397,7 +431,9 @@ export function RightPanel({
     if (label === "Generate marketing strategy") {
       return busyAction === "marketgen" || busyAction === "marketchat";
     }
-    if (label === "Generate next 14 days") return busyAction === "cal14";
+    if (label === "Generate next 14 days" || label === "Plan next 14 days") {
+      return busyAction === "cal14";
+    }
     if (label === "Balance channels") return busyAction === "calbalance";
     if (label === "Find calendar gaps") return busyAction === "calgaps";
     if (label === "Write LinkedIn posts") return busyAction === "li";

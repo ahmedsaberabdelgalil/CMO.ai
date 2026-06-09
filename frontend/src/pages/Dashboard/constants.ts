@@ -101,7 +101,7 @@ export const nextActions: Record<AgentId, string[]> = {
     "Create a voice guide",
     "Write audience objections",
   ],
-  calendar: ["Generate next 14 days", "Balance channels", "Find calendar gaps"],
+  calendar: ["Plan next 14 days", "Balance channels", "Find calendar gaps"],
   text: ["Write LinkedIn posts", "Draft email sequence", "Create ad hooks"],
   image: [
     "Create image prompts",

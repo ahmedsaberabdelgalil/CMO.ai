@@ -102,33 +102,6 @@ async def send_password_reset_email(to_email: str, reset_token: str) -> None:
     await send_email(to_email, subject, body)
 
 
-async def send_team_invite_email(
-    to_email: str, team_name: str, inviter_name: str, role: str
-) -> None:
-    """Send a team invitation email."""
-    team_name = (team_name or "").strip()
-    inviter_name = (inviter_name or "").strip()
-    role = (role or "").strip()
-
-    if not team_name:
-        raise ValueError("team_name must not be empty")
-    if not inviter_name:
-        raise ValueError("inviter_name must not be empty")
-    if not role:
-        raise ValueError("role must not be empty")
-
-    subject = f"You have been invited to join {team_name} on CMO.AI"
-    body = (
-        "Hi,\n\n"
-        f"{inviter_name} has invited you to join the team \"{team_name}\" on CMO.AI.\n"
-        f"Role: {role}\n\n"
-        "Create your account to accept the invite:\n"
-        "http://localhost:5173/register\n\n"
-        "— CMO.AI"
-    )
-    await send_email(to_email, subject, body)
-
-
 async def send_welcome_email(to_email: str, name: str) -> None:
     """Send a welcome email to a newly registered user."""
     name = (name or "").strip()

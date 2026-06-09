@@ -69,14 +69,6 @@ async def create_content_item(
 ):
     return await service.create_content_item(data, current_user.id, db)
 
-@router.get("/posts/upcoming", response_model=List[ContentItemOut])
-async def get_upcoming_items(
-    limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(get_current_user_async),
-    db: AsyncSession = Depends(get_async_db)
-):
-    return await service.get_upcoming_items(current_user.id, limit, db)
-
 @router.get("/posts/{item_id}", response_model=ContentItemOut)
 async def get_content_item(
     item_id: int,

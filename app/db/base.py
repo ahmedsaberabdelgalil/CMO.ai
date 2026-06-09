@@ -11,11 +11,6 @@ class UserRole(enum.Enum):
     admin = 'admin'
     member = 'member'
 
-class MemberRole(enum.Enum):
-    admin = 'admin'
-    editor = 'editor'
-    viewer = 'viewer'
-
 class StrategyStatus(enum.Enum):
     draft = 'draft'
     active = 'active'

@@ -1,113 +1,97 @@
-import { useEffect, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import type { AnalyticsOverview, ChannelBreakdown } from "../../../types/api";
-import { getAnalyticsChannels, getAnalyticsOverview } from "../../../services/analyticsService";
 import { nextActions } from "../constants";
 import { SuggestionList } from "../components/SuggestionList";
-import type { Agent, AgentId, AgentSuggestion } from "../types";
+import type { Agent, AgentSuggestion, ChatMessage } from "../types";
 
 export function AnalyticsRightAside({
   activeAgent,
   campaignName,
+  messages,
+  draft,
+  onDraftChange,
+  onSend,
   suggestions,
-  onDemoAction,
+  onSummarize,
+  onWeakFunnel,
+  onBudgetShift,
+  busyAction,
 }: {
   activeAgent: Agent;
   campaignName: string;
+  messages: ChatMessage[];
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onSend: (message?: string) => void;
   suggestions: AgentSuggestion[];
-  onDemoAction: (agentId: AgentId, action: string) => void;
+  onSummarize: () => void;
+  onWeakFunnel: () => void;
+  onBudgetShift: () => void;
+  busyAction: string | null;
 }) {
   const Icon = activeAgent.icon;
-  const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
-  const [channels, setChannels] = useState<ChannelBreakdown[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState("");
+  const isBusy =
+    busyAction === "asum" ||
+    busyAction === "afunnel" ||
+    busyAction === "abudget" ||
+    busyAction === "analychat";
 
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([getAnalyticsOverview(), getAnalyticsChannels()])
-      .then(([o, ch]) => {
-        if (!cancelled) {
-          setOverview(o);
-          setChannels(ch);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled)
-          setErr(e instanceof Error ? e.message : "Something went wrong");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const runQuick = (label: string) => {
+    if (label === "Summarize performance") {
+      onSummarize();
+      return;
+    }
+    if (label === "Find weak funnel step") onWeakFunnel();
+    if (label === "Suggest budget shift") onBudgetShift();
+  };
 
   return (
     <aside className="border-t border-white/10 bg-[#0D1018] xl:border-l xl:border-t-0">
       <div className="flex h-full min-h-[560px] flex-col">
-        <div className="px-4 py-4 border-b border-white/10">
+        <div className="border-b border-white/10 px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center rounded-md size-10 bg-white/10">
+            <div className="flex size-10 items-center justify-center rounded-md bg-white/10">
               <Icon className={`size-5 ${activeAgent.accent}`} />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">
-                {activeAgent.name}
-              </p>
-              <p className="text-xs truncate text-white/45">{campaignName}</p>
+              <p className="truncate text-sm font-semibold">{activeAgent.name}</p>
+              <p className="truncate text-xs text-white/45">{campaignName}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 px-4 py-4 space-y-3 overflow-y-auto text-sm text-white/80">
-          {loading ? (
-            <p className="flex items-center gap-2 text-white/60">
-              <Loader2 className="size-4 animate-spin" /> Loading...
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          <SuggestionList suggestions={suggestions} onSelect={runQuick} />
+          {messages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={`rounded-md px-3 py-2 text-sm leading-6 ${
+                message.role === "user"
+                  ? "ml-8 bg-neonBlue text-cosmic"
+                  : "mr-8 bg-white/[0.07] text-white/80"
+              }`}
+            >
+              <p className="whitespace-pre-wrap break-words">{message.text}</p>
+            </div>
+          ))}
+          {isBusy ? (
+            <p className="flex items-center gap-2 text-xs text-white/50">
+              <Loader2 className="size-3 animate-spin" />
+              Analytics agent working…
             </p>
-          ) : err ? (
-            <p className="text-red-300">{err}</p>
-          ) : overview ? (
-            <>
-              <SuggestionList
-                suggestions={suggestions}
-                onSelect={(action) => onDemoAction("analytics", action)}
-              />
-              <div className="rounded-md bg-white/[0.07] px-3 py-2">
-                <p className="text-xs text-white/45">Overview</p>
-                <p>Reach: {overview.total_reach}</p>
-                <p>Engagement: {overview.avg_engagement_rate}%</p>
-                <p>Clicks: {overview.total_clicks}</p>
-                <p>Conversions: {overview.total_conversions}</p>
-              </div>
-              {channels?.length ? (
-                <div className="rounded-md bg-white/[0.07] px-3 py-2">
-                  <p className="text-xs text-white/45">Channels</p>
-                  <ul className="mt-1 space-y-1">
-                    {channels.map((c) => (
-                      <li key={c.platform}>
-                        {c.platform}: {c.total_clicks} clicks
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </>
           ) : null}
         </div>
 
-        <div className="p-4 border-t border-white/10">
-          <div className="grid gap-2 mb-3">
+        <div className="border-t border-white/10 p-4">
+          <div className="mb-3 grid gap-2">
             {nextActions.analytics.slice(1).map((action) => (
               <button
                 key={action}
                 type="button"
-                onClick={() => onDemoAction("analytics", action)}
-                className="px-3 py-2 text-xs text-left transition border rounded-md border-white/10 text-white/70 hover:border-neonBlue/60 hover:text-white"
+                disabled={isBusy}
+                onClick={() => runQuick(action)}
+                className="rounded-md border border-white/10 px-3 py-2 text-left text-xs text-white/70 transition hover:border-neonBlue/60 hover:text-white disabled:opacity-50"
               >
                 {action}
               </button>
@@ -117,22 +101,21 @@ export function AnalyticsRightAside({
             className="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              const action = draft.trim() || "Find weak funnel step";
-              onDemoAction("analytics", action);
-              setDraft("");
+              onSend();
             }}
           >
             <Input
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Ask Analytics"
-              className="bg-white h-11 border-white/10 text-cosmic placeholder:text-slate-500"
+              onChange={(e) => onDraftChange(e.target.value)}
+              disabled={isBusy}
+              placeholder="Ask Analytics agent"
+              className="h-11 border-white/10 bg-white text-cosmic placeholder:text-slate-500"
             />
             <Button
               type="submit"
               size="icon"
-              disabled={!draft.trim()}
-              className="text-white h-11 w-11 bg-neonPink hover:bg-neonPink/90"
+              disabled={isBusy || !draft.trim()}
+              className="h-11 w-11 bg-neonPink text-white hover:bg-neonPink/90"
             >
               <Send className="size-4" />
             </Button>

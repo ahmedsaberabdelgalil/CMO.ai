@@ -18,12 +18,9 @@ import { NewCampaignModal } from "../../components/NewCampaignModal";
 import { deleteCampaign } from "../../services/campaignService";
 import { deleteBrand, getBrands} from "../../services/brandService";
 import { useCampaign } from "../../hooks/useCampaign";
-import {
-  getAnalyticsChannels,
-  getAnalyticsOverview,
-} from "../../services/analyticsService";
 import { listAssets } from "../../services/assetsService";
-import { getContentCalendar } from "../../services/contentCalendarService";
+import { generateCalendarInsight } from "../../services/calendarAgentService";
+import { generateAnalyticsInsight } from "../../services/analyticsAgentService";
 import {
   generateContent,
   getContentAgentStatus,
@@ -34,16 +31,15 @@ import {
 } from "../../services/imageAgentService";
 import { generateVideo } from "../../services/videoAgentService";
 import { generateMarketingStrategy } from "../../services/marketingAgentService";
-import { getDashboardUpcoming } from "../../services/dashboardService";
 import type {
   BrandOut,
   CampaignOut,
   ContentAgentPlatform,
   ContentAgentStatus,
   ContentAgentType,
-  ContentCalendarMap,
   TextAgentResponse,
-  ChannelBreakdown,
+  CalendarAgentResponse,
+  AnalyticsAgentResponse,
   ImageAgentResponse,
   ImageAgentStatus,
   ImageAgentPlatform,
@@ -104,12 +100,6 @@ export default function Dashboard() {
   const [selectedBrandId, setSelectedBrandId] = useState<number | "all">("all");
   const [brands, setBrands] = useState<BrandOut[]>([]);
 
-  const [upcoming, setUpcoming] = useState<Awaited<
-    ReturnType<typeof getDashboardUpcoming>
-  > | null>(null);
-  const [upcomingLoading, setUpcomingLoading] = useState(false);
-  const [upcomingError, setUpcomingError] = useState<string | null>(null);
-
   const [resultOpen, setResultOpen] = useState(false);
   const [resultTitle, setResultTitle] = useState("");
   const [resultBody, setResultBody] = useState("");
@@ -157,20 +147,24 @@ export default function Dashboard() {
 
   const [marketingLastResult, setMarketingLastResult] =
     useState<MarketingAgentResponse | null>(null);
-  const [calendarData, setCalendarData] = useState<ContentCalendarMap | null>(
-    null,
-  );
-  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
-  const [channelsView, setChannelsView] = useState<ChannelBreakdown[] | null>(
-    null,
-  );
+  const [calendarLastResult, setCalendarLastResult] =
+    useState<CalendarAgentResponse | null>(null);
+  const [analyticsLastResult, setAnalyticsLastResult] =
+    useState<AnalyticsAgentResponse | null>(null);
   const [calendarChatMessages, setCalendarChatMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      text: "I can plan launch cadence, spot calendar gaps, and balance content timing for this campaign.",
+      text: "I can plan launch cadence, balance channels, and find calendar gaps for this campaign.",
     },
   ]);
   const [calendarDraft, setCalendarDraft] = useState("");
+  const [analyticsChatMessages, setAnalyticsChatMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      text: "I can summarize performance, find weak funnel steps, and suggest budget shifts.",
+    },
+  ]);
+  const [analyticsDraft, setAnalyticsDraft] = useState("");
   const filteredCampaigns = useMemo(() => {
     if (selectedBrandId === "all") return campaigns;
 
@@ -296,26 +290,6 @@ export default function Dashboard() {
   }, [dashboardCampaignId, textChatMessages]);
 
   useEffect(() => {
-    if (!dashboardCampaignId) {
-      setUpcoming(null);
-      return;
-    }
-
-    setUpcomingLoading(true);
-    setUpcomingError(null);
-
-    void getDashboardUpcoming()
-      .then(setUpcoming)
-      .catch((e) => {
-        setUpcomingError(
-          e instanceof Error ? e.message : "Something went wrong",
-        );
-        setUpcoming(null);
-      })
-      .finally(() => setUpcomingLoading(false));
-  }, [dashboardCampaignId]);
-
-  useEffect(() => {
     void getBrands()
       .then(setBrands)
       .catch((error) => console.error(error));
@@ -367,12 +341,7 @@ export default function Dashboard() {
         ? "+12%"
         : "N/A";
 
-  const contentQueueDisplay = useMemo(() => {
-    if (upcomingLoading) return "...";
-    if (upcomingError) return "-";
-    if (!upcoming) return "-";
-    return String(upcoming.length);
-  }, [upcoming, upcomingLoading, upcomingError]);
+  const campaignStatusDisplay = dashboardCampaign?.status ?? "N/A";
 
   const launchWindowDisplay = useMemo(() => {
     if (!dashboardCampaign?.start_date) return "--";
@@ -481,28 +450,6 @@ export default function Dashboard() {
         });
       }
 
-      if (upcomingError) {
-        items.push({
-          id: "queue-error",
-          title: "Content queue needs a check",
-          detail: upcomingError,
-          tone: "warn",
-          showInBadge: true,
-          actionLabel: "Open Calendar",
-          actionType: "calendar",
-        });
-      } else if (upcoming?.length) {
-        items.push({
-          id: "queue-ready",
-          title: `${upcoming.length} items in the queue`,
-          detail: "Your upcoming content is loaded and ready to review.",
-          tone: "success",
-          showInBadge: false,
-          actionLabel: "Open Calendar",
-          actionType: "calendar",
-        });
-      }
-
       return items;
     }) as () => DashboardNotification[],
     [
@@ -513,8 +460,6 @@ export default function Dashboard() {
       campaigns.length,
       imageAgentStatus,
       isAllBrandsView,
-      upcoming,
-      upcomingError,
     ],
   );
 
@@ -614,25 +559,11 @@ export default function Dashboard() {
           showResult("Marketing agent error", res.strategy!);
         } else if (res.calendar_ready && res.strategy_id) {
           await refreshCampaign();
-          setCalendarMessage(null);
-
-          const now = new Date();
-          try {
-            const data = await getContentCalendar({
-              strategy_id: res.strategy_id,
-              month: now.getMonth() + 1,
-              year: now.getFullYear(),
-            });
-            setCalendarData(data);
-            setChannelsView(null);
-          } catch {
-            setCalendarData(null);
-          }
 
           const count = res.calendar_items_created ?? 14;
           showResult(
             "Marketing plan ready",
-            `Strategy linked to this campaign with ${count} scheduled posts. Open the Calendar tab to review your content schedule.`,
+            `Strategy linked to this campaign with ${count} scheduled posts. Open the Calendar agent to plan and review your schedule.`,
           );
         }
       } catch (e) {
@@ -682,138 +613,155 @@ export default function Dashboard() {
     ],
   );
 
-  const handleCalendarGenerate14 = useCallback(async () => {
-    if (!dashboardCampaign) {
-      showResult(
-        "Select a campaign",
-        "Choose a campaign before loading the content calendar.",
-      );
-      return;
-    }
-    if (!dashboardCampaign.strategy_id) {
-      setCalendarMessage(
-        "No marketing plan linked yet. Generate a strategy in Market Planner first — it will automatically populate your calendar.",
-      );
-      setCalendarData(null);
-      setChannelsView(null);
-      return;
-    }
+  const runCalendarAgent = useCallback(
+    async (message: string, busyKey: string) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before using the calendar agent.",
+        );
+        return;
+      }
 
-    setBusyAction("cal14");
-    setCalendarMessage(null);
+      setBusyAction(busyKey);
+      setCalendarChatMessages((prev) => [...prev, { role: "user", text: message }]);
 
-    try {
-      const now = new Date();
-      const data = await getContentCalendar({
-        strategy_id: dashboardCampaign.strategy_id,
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
-      });
-      setCalendarData(data);
-      setChannelsView(null);
-      const count = Object.values(data).reduce((n, items) => n + items.length, 0);
-      setCalendarChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text:
-            count === 0
-              ? "No scheduled posts found for this month. Add content items to your strategy schedule."
-              : `Loaded ${count} scheduled post(s) for this month.`,
-        },
-      ]);
-    } catch (e) {
-      const err = e instanceof Error ? e.message : "Something went wrong";
-      setCalendarMessage(err);
-      setCalendarData(null);
-    } finally {
-      setBusyAction(null);
-    }
-  }, [dashboardCampaign, showResult]);
+      try {
+        const res = await generateCalendarInsight({
+          message,
+          campaign_id: dashboardCampaign.id,
+        });
+        setCalendarLastResult(res);
 
-  useEffect(() => {
-    if (activeAgentId !== "calendar") return;
-    if (!dashboardCampaign?.strategy_id) return;
-    if (calendarData !== null || channelsView !== null) return;
-    if (busyAction) return;
+        const text =
+          res.error_message ||
+          res.response ||
+          "Calendar agent did not return a response.";
 
-    if (
-      calendarMessage?.includes(
-        "No strategy linked to this campaign yet",
-      ) ||
-      calendarMessage?.includes("No marketing plan linked yet")
-    ) {
-      setCalendarMessage(null);
-    }
+        setCalendarChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text },
+        ]);
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        setCalendarChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: err },
+        ]);
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, showResult],
+  );
 
-    void handleCalendarGenerate14();
-  }, [
-    activeAgentId,
-    busyAction,
-    calendarData,
-    calendarMessage,
-    channelsView,
-    dashboardCampaign?.strategy_id,
-    handleCalendarGenerate14,
-  ]);
+  const handleCalendarPlan14 = useCallback(() => {
+    void runCalendarAgent(
+      "Plan the next 14 days of content for this campaign. Include platform mix, post themes, and timing.",
+      "cal14",
+    );
+  }, [runCalendarAgent]);
 
-  useEffect(() => {
-    setCalendarData(null);
-    setChannelsView(null);
-    setCalendarMessage(null);
-  }, [dashboardCampaignId]);
-
-  const handleCalendarBalance = useCallback(async () => {
-    setBusyAction("channels");
-    setCalendarMessage(null);
-
-    try {
-      const rows = await getAnalyticsChannels();
-      setChannelsView(rows);
-      setCalendarData(null);
-      setCalendarChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: `Channel breakdown loaded for ${rows.length} platform(s).`,
-        },
-      ]);
-    } catch (e) {
-      const err = e instanceof Error ? e.message : "Something went wrong";
-      setCalendarMessage(err);
-      setChannelsView(null);
-    } finally {
-      setBusyAction(null);
-    }
-  }, []);
+  const handleCalendarBalance = useCallback(() => {
+    void runCalendarAgent(
+      "Balance content across channels for this campaign. Recommend how to distribute posts and effort.",
+      "calbalance",
+    );
+  }, [runCalendarAgent]);
 
   const handleCalendarFindGaps = useCallback(() => {
-    setBusyAction("calgaps");
-    const msg =
-      "Calendar gap analysis agent is not available yet. Use Generate next 14 days to review scheduled posts, or Balance channels to compare platform performance.";
-    setCalendarMessage(msg);
-    setCalendarChatMessages((prev) => [
-      ...prev,
-      { role: "assistant", text: msg },
-    ]);
-    setBusyAction(null);
-  }, []);
+    void runCalendarAgent(
+      "Find gaps in the content calendar and suggest what to add or reschedule.",
+      "calgaps",
+    );
+  }, [runCalendarAgent]);
 
   const handleCalendarChatSend = useCallback(
     (message = calendarDraft) => {
       const trimmed = message.trim();
       if (!trimmed) return;
       setCalendarDraft("");
-      setCalendarChatMessages((prev) => [
-        ...prev,
-        { role: "user", text: trimmed },
-        {
-          role: "assistant",
-          text: "The content calendar chat agent is coming soon. Use Generate next 14 days or Balance channels for now.",
-        },
-      ]);
+      void runCalendarAgent(trimmed, "calchat");
     },
-    [calendarDraft],
+    [calendarDraft, runCalendarAgent],
+  );
+
+  const runAnalyticsAgent = useCallback(
+    async (message: string, busyKey: string) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before using the analytics agent.",
+        );
+        return;
+      }
+
+      setBusyAction(busyKey);
+      setAnalyticsChatMessages((prev) => [
+        ...prev,
+        { role: "user", text: message },
+      ]);
+
+      try {
+        const res = await generateAnalyticsInsight({
+          message,
+          campaign_id: dashboardCampaign.id,
+        });
+        setAnalyticsLastResult(res);
+
+        const text =
+          res.error_message ||
+          res.response ||
+          "Analytics agent did not return a response.";
+
+        setAnalyticsChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text },
+        ]);
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        setAnalyticsChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: err },
+        ]);
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, showResult],
+  );
+
+  const handleAnalyticsSummarize = useCallback(() => {
+    void runAnalyticsAgent(
+      "Summarize overall marketing performance for this campaign.",
+      "asum",
+    );
+  }, [runAnalyticsAgent]);
+
+  const handleAnalyticsWeakFunnel = useCallback(() => {
+    void runAnalyticsAgent(
+      "Find the weakest step in the marketing funnel and explain why.",
+      "afunnel",
+    );
+  }, [runAnalyticsAgent]);
+
+  const handleAnalyticsBudgetShift = useCallback(() => {
+    void runAnalyticsAgent(
+      "Suggest how to shift budget across channels based on current performance.",
+      "abudget",
+    );
+  }, [runAnalyticsAgent]);
+
+  const handleAnalyticsChatSend = useCallback(
+    (message = analyticsDraft) => {
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      setAnalyticsDraft("");
+      void runAnalyticsAgent(trimmed, "analychat");
+    },
+    [analyticsDraft, runAnalyticsAgent],
   );
 
   const runTextGenerate = useCallback(
@@ -933,7 +881,7 @@ export default function Dashboard() {
           campaign_id: dashboardCampaign.id,
           platform,
           num_variations: numVariations,
-          logo_enabled: true,
+          logo_enabled: false,
         });
         setImageLastResult(res);
         const formatted = formatImageAgentResponse(res);
@@ -1097,31 +1045,6 @@ export default function Dashboard() {
     },
     [videoDraft, dashboardCampaign, runVideoGenerate],
   );
-
-  const handleAnalyticsSummarize = useCallback(async () => {
-    setBusyAction("asum");
-
-    try {
-      const o = await getAnalyticsOverview();
-
-      const body = [
-        `Total Reach: ${o.total_reach}`,
-        `Engagement Rate: ${o.avg_engagement_rate}%`,
-        `Clicks: ${o.total_clicks}`,
-        `Conversions: ${o.total_conversions}`,
-        `Impressions: ${o.total_impressions}`,
-      ].join("\n");
-
-      showResult("Performance summary", body);
-    } catch (e) {
-      showResult(
-        "Error",
-        e instanceof Error ? e.message : "Something went wrong",
-      );
-    } finally {
-      setBusyAction(null);
-    }
-  }, [showResult]);
 
   const handleDemoAgentAction = useCallback(
     (agentId: AgentId, action: string) => {
@@ -1505,8 +1428,8 @@ export default function Dashboard() {
                     icon={CheckCircle2}
                   />
                   <MetricCard
-                    label="Content Queue"
-                    value={contentQueueDisplay}
+                    label="Campaign Status"
+                    value={campaignStatusDisplay}
                     icon={MessageSquareText}
                   />
                   <MetricCard
@@ -1604,11 +1527,10 @@ export default function Dashboard() {
                     />
                   ) : activeAgentId === "calendar" ? (
                     <CalendarPanels
-                      calendarData={calendarData}
-                      calendarMessage={calendarMessage}
-                      channelsView={channelsView}
                       busyAction={busyAction}
-                      onGenerate14={handleCalendarGenerate14}
+                      lastResult={calendarLastResult}
+                      messages={calendarChatMessages}
+                      onPlan14={handleCalendarPlan14}
                       onBalance={handleCalendarBalance}
                       onFindGaps={handleCalendarFindGaps}
                     />
@@ -1648,19 +1570,11 @@ export default function Dashboard() {
                   ) : (
                     <AnalyticsPanels
                       busyAction={busyAction}
+                      lastResult={analyticsLastResult}
+                      messages={analyticsChatMessages}
                       onSummarize={handleAnalyticsSummarize}
-                      onWeakFunnel={() =>
-                        handleDemoAgentAction(
-                          "analytics",
-                          "Find weak funnel step",
-                        )
-                      }
-                      onBudgetShift={() =>
-                        handleDemoAgentAction(
-                          "analytics",
-                          "Suggest budget shift",
-                        )
-                      }
+                      onWeakFunnel={handleAnalyticsWeakFunnel}
+                      onBudgetShift={handleAnalyticsBudgetShift}
                     />
                   )}
                 </>
@@ -1679,7 +1593,7 @@ export default function Dashboard() {
               brandAudience={dashboardBrandAudience}
               nextActions={nextActions[activeAgentId]}
               onDemoAction={handleDemoAgentAction}
-              onCalendar14={handleCalendarGenerate14}
+              onCalendarPlan14={handleCalendarPlan14}
               onCalendarBalance={handleCalendarBalance}
               onCalendarFindGaps={handleCalendarFindGaps}
               onMarketQuickAction={handleMarketQuickAction}
@@ -1687,6 +1601,13 @@ export default function Dashboard() {
               calendarDraft={calendarDraft}
               onCalendarDraftChange={setCalendarDraft}
               onCalendarChatSend={handleCalendarChatSend}
+              analyticsChatMessages={analyticsChatMessages}
+              analyticsDraft={analyticsDraft}
+              onAnalyticsDraftChange={setAnalyticsDraft}
+              onAnalyticsChatSend={handleAnalyticsChatSend}
+              onAnalyticsSummarize={handleAnalyticsSummarize}
+              onAnalyticsWeakFunnel={handleAnalyticsWeakFunnel}
+              onAnalyticsBudgetShift={handleAnalyticsBudgetShift}
               onTextLi={handleTextLinkedIn}
               onTextEmail={handleTextEmail}
               onTextHooks={handleTextHooks}

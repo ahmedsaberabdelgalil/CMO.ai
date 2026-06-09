@@ -13,7 +13,7 @@ class ImageAgentRequest(BaseModel):
     ] = "instagram"
     image_size: Literal["512x512", "768x768", "1024x1024"] = "512x512"
     num_variations: int = Field(default=1, ge=1, le=4)
-    logo_enabled: bool = True
+    logo_enabled: bool = False
     ad_copy: Optional[str] = None
 
 

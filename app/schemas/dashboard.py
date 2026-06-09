@@ -23,14 +23,6 @@ class RecentActivity(BaseModel):
     items: List[RecentActivityItem]
 
 
-class UpcomingContentItem(BaseModel):
-    id: int
-    title: str
-    scheduled_date: date
-    platform: str
-    status: str
-
-
 class AIInsight(BaseModel):
     message: str
 

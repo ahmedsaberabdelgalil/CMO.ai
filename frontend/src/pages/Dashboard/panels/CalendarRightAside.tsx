@@ -12,7 +12,7 @@ export function CalendarRightAside({
   onDraftChange,
   onSend,
   suggestions,
-  onGenerate14,
+  onPlan14,
   onBalance,
   onFindGaps,
   busyAction,
@@ -24,7 +24,7 @@ export function CalendarRightAside({
   onDraftChange: (v: string) => void;
   onSend: (message?: string) => void;
   suggestions: AgentSuggestion[];
-  onGenerate14: () => void;
+  onPlan14: () => void;
   onBalance: () => void;
   onFindGaps: () => void;
   busyAction: string | null;
@@ -32,12 +32,15 @@ export function CalendarRightAside({
   const Icon = activeAgent.icon;
   const isBusy =
     busyAction === "cal14" ||
-    busyAction === "channels" ||
+    busyAction === "calbalance" ||
     busyAction === "calgaps" ||
     busyAction === "calchat";
 
   const runQuick = (label: string) => {
-    if (label === "Generate next 14 days") onGenerate14();
+    if (label === "Plan next 14 days" || label === "Generate next 14 days") {
+      onPlan14();
+      return;
+    }
     if (label === "Balance channels") onBalance();
     if (label === "Find calendar gaps") onFindGaps();
   };
@@ -74,28 +77,26 @@ export function CalendarRightAside({
           {isBusy ? (
             <p className="flex items-center gap-2 text-xs text-white/50">
               <Loader2 className="size-3 animate-spin" />
-              Loading calendar…
+              Calendar agent working…
             </p>
           ) : null}
         </div>
 
         <div className="border-t border-white/10 p-4">
           <div className="mb-3 grid gap-2">
-            {[
-              "Generate next 14 days",
-              "Balance channels",
-              "Find calendar gaps",
-            ].map((action) => (
-              <button
-                key={action}
-                type="button"
-                disabled={isBusy}
-                onClick={() => runQuick(action)}
-                className="rounded-md border border-white/10 px-3 py-2 text-left text-xs text-white/70 transition hover:border-neonBlue/60 hover:text-white disabled:opacity-50"
-              >
-                {action}
-              </button>
-            ))}
+            {["Plan next 14 days", "Balance channels", "Find calendar gaps"].map(
+              (action) => (
+                <button
+                  key={action}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => runQuick(action)}
+                  className="rounded-md border border-white/10 px-3 py-2 text-left text-xs text-white/70 transition hover:border-neonBlue/60 hover:text-white disabled:opacity-50"
+                >
+                  {action}
+                </button>
+              ),
+            )}
           </div>
 
           <form
@@ -109,7 +110,7 @@ export function CalendarRightAside({
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
               disabled={isBusy}
-              placeholder="Ask Calendar (coming soon)"
+              placeholder="Ask Calendar agent"
               className="h-11 border-white/10 bg-white text-cosmic placeholder:text-slate-500"
             />
             <Button

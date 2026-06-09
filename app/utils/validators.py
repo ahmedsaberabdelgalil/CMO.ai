@@ -76,16 +76,6 @@ def validate_strategy_status(status_value: str) -> None:
         )
 
 
-def validate_member_role(role: str) -> None:
-    """Validate member role is one of: admin, editor, viewer."""
-    allowed = {"admin", "editor", "viewer"}
-    if role not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {role}. Must be admin, editor, or viewer",
-        )
-
-
 def validate_asset_type(asset_type: str) -> None:
     """Validate asset type is one of: image, video, copy."""
     allowed = {"image", "video", "copy"}

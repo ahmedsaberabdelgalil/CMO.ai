@@ -12,7 +12,6 @@ from app.schemas.dashboard import (
     DashboardSummary,
     PlanUsage,
     RecentActivityItem,
-    UpcomingContentItem,
 )
 from app.services import dashboard_service as service
 
@@ -33,14 +32,6 @@ async def dashboard_recent_activity(
     db: AsyncSession = Depends(get_async_db),
 ):
     return await service.get_recent_activity(current_user.id, db)
-
-
-@router.get("/upcoming", response_model=List[UpcomingContentItem])
-async def dashboard_upcoming(
-    current_user: User = Depends(get_current_user_async),
-    db: AsyncSession = Depends(get_async_db),
-):
-    return await service.get_upcoming_content(current_user.id, db)
 
 
 @router.get("/insights", response_model=List[AIInsight])

@@ -20,7 +20,6 @@ from app.schemas.dashboard import (
     DashboardSummary,
     PlanUsage,
     RecentActivityItem,
-    UpcomingContentItem,
 )
 
 
@@ -134,38 +133,6 @@ async def get_recent_activity(user_id: int, db: AsyncSession) -> List[RecentActi
             timestamp=r.timestamp,
         )
         for r in rows
-    ]
-
-
-async def get_upcoming_content(user_id: int, db: AsyncSession) -> List[UpcomingContentItem]:
-    today = date.today()
-    stmt = (
-        select(ContentItem)
-        .join(ContentSchedule)
-        .join(MarketingStrategy)
-        .join(Brand)
-        .where(
-            Brand.user_id == user_id,
-            ContentItem.scheduled_date >= today,
-        )
-        .order_by(ContentItem.scheduled_date.asc())
-        .limit(5)
-    )
-    result = await db.execute(stmt)
-    items = result.scalars().all()
-    return [
-        UpcomingContentItem(
-            id=item.id,
-            title=item.title,
-            scheduled_date=item.scheduled_date,
-            platform=item.platform.value
-            if hasattr(item.platform, "value")
-            else str(item.platform),
-            status=item.status.value
-            if hasattr(item.status, "value")
-            else str(item.status),
-        )
-        for item in items
     ]
 
 

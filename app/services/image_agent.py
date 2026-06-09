@@ -73,7 +73,7 @@ class LogoPosition(str, Enum):
 
 @dataclass
 class LogoConfig:
-    enabled:    bool        = True
+    enabled:    bool        = False
     text:       str         = ""
     bg_color:   str         = ""
     text_color: str         = "#FFFFFF"

@@ -19,16 +19,14 @@ from app.api.v1 import (
     notifications,
     quick_actions,
     strategies,
-    teams,
     users,
 )
-from app.api.v1.agents import content, image, marketing, video
+from app.api.v1.agents import analytics_agent, calendar, content, image, marketing, video
 
 api_router = APIRouter()
 
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
-api_router.include_router(teams.router)
 api_router.include_router(brands.router)
 api_router.include_router(strategies.router)
 api_router.include_router(content_calendar.router, prefix="/content-calendar", tags=["Content Calendar"])
@@ -43,4 +41,6 @@ api_router.include_router(content.router)
 api_router.include_router(image.router)
 api_router.include_router(video.router)
 api_router.include_router(marketing.router)
+api_router.include_router(calendar.router)
+api_router.include_router(analytics_agent.router)
 

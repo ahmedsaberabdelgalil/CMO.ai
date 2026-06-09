@@ -136,13 +136,3 @@ async def update_content_status(item_id: int, data: PostStatusUpdate, user_id: i
     await db.commit()
     await db.refresh(item)
     return item
-
-async def get_upcoming_items(user_id: int, limit: int, db: AsyncSession) -> List[ContentItem]:
-    today = date.today()
-    stmt = select(ContentItem).join(ContentSchedule).join(MarketingStrategy).join(Brand).where(
-        Brand.user_id == user_id,
-        ContentItem.scheduled_date >= today
-    ).order_by(ContentItem.scheduled_date.asc(), ContentItem.scheduled_time.asc()).limit(limit)
-    
-    result = await db.execute(stmt)
-    return result.scalars().all()
