@@ -137,7 +137,6 @@ The platform uses 14 PostgreSQL tables centered around the `brands` entity.
 ### Core Tables
 
 - users
-- team_members
 - brands
 - marketing_strategies
 - content_schedules
