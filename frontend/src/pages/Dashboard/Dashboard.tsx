@@ -22,6 +22,12 @@ import { listAssets } from "../../services/assetsService";
 import { generateCalendarInsight } from "../../services/calendarAgentService";
 import { generateAnalyticsInsight } from "../../services/analyticsAgentService";
 import {
+  generateBrandCoaching,
+  generateBrandReport,
+  saveBrandProfile,
+} from "../../services/brandAgentService";
+import { orchestrate } from "../../services/orchestratorAgentService";
+import {
   generateContent,
   getContentAgentStatus,
 } from "../../services/contentAgentService";
@@ -54,6 +60,7 @@ import {
   formatImageAgentResponse,
   formatTextAgentResponse,
   launchWindowDaysFromStart,
+  resolveUploadUrl,
 } from "./utils";
 import { ResultDialog } from "./components/ResultDialog";
 import { MetricCard } from "./components/MetricCard";
@@ -165,6 +172,22 @@ export default function Dashboard() {
     },
   ]);
   const [analyticsDraft, setAnalyticsDraft] = useState("");
+  const [brandChatMessages, setBrandChatMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      text: "I'm your brand coach. Tell me about your business and I'll help shape positioning, voice, and audience — then I can generate a full brand strategy report.",
+    },
+  ]);
+  const [brandDraft, setBrandDraft] = useState("");
+  const [orchestratorChatMessages, setOrchestratorChatMessages] = useState<
+    ChatMessage[]
+  >([
+    {
+      role: "assistant",
+      text: "I'm the orchestrator. Ask me anything about this campaign and I'll route it to the right agent — content, brand, calendar, analytics, and more.",
+    },
+  ]);
+  const [orchestratorDraft, setOrchestratorDraft] = useState("");
   const filteredCampaigns = useMemo(() => {
     if (selectedBrandId === "all") return campaigns;
 
@@ -762,6 +785,211 @@ export default function Dashboard() {
       void runAnalyticsAgent(trimmed, "analychat");
     },
     [analyticsDraft, runAnalyticsAgent],
+  );
+
+  const runBrandCoaching = useCallback(
+    async (message: string, busyKey: string) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before using the brand coach.",
+        );
+        return;
+      }
+
+      setBusyAction(busyKey);
+      const nextMessages: ChatMessage[] = [
+        ...brandChatMessages,
+        { role: "user", text: message },
+      ];
+      setBrandChatMessages(nextMessages);
+
+      try {
+        const res = await generateBrandCoaching({
+          campaign_id: dashboardCampaign.id,
+          messages: nextMessages.map((m) => ({ role: m.role, content: m.text })),
+        });
+        const text =
+          res.error_message ||
+          res.response ||
+          "Brand agent did not return a response.";
+        setBrandChatMessages((prev) => [...prev, { role: "assistant", text }]);
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        setBrandChatMessages((prev) => [...prev, { role: "assistant", text: err }]);
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, brandChatMessages, showResult],
+  );
+
+  const handleBrandChatSend = useCallback(
+    (message = brandDraft) => {
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      setBrandDraft("");
+      void runBrandCoaching(trimmed, "brandchat");
+    },
+    [brandDraft, runBrandCoaching],
+  );
+
+  const handleBrandReport = useCallback(async () => {
+    if (!dashboardCampaign) {
+      showResult(
+        "Select a campaign",
+        "Choose a campaign before generating a brand report.",
+      );
+      return;
+    }
+
+    setBusyAction("brandreport");
+    setBrandChatMessages((prev) => [
+      ...prev,
+      { role: "user", text: "Generate a full brand strategy report." },
+    ]);
+
+    try {
+      const res = await generateBrandReport({
+        campaign_id: dashboardCampaign.id,
+        messages: brandChatMessages.map((m) => ({
+          role: m.role,
+          content: m.text,
+        })),
+      });
+      const text =
+        res.error_message ||
+        res.response ||
+        "Brand agent did not return a report.";
+      setBrandChatMessages((prev) => [...prev, { role: "assistant", text }]);
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Something went wrong";
+      setBrandChatMessages((prev) => [...prev, { role: "assistant", text: err }]);
+      showResult("Error", err);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [dashboardCampaign, brandChatMessages, showResult]);
+
+  const handleBrandSaveProfile = useCallback(async () => {
+    if (!dashboardCampaign) {
+      showResult(
+        "Select a campaign",
+        "Choose a campaign before saving a brand profile.",
+      );
+      return;
+    }
+
+    setBusyAction("brandsave");
+    try {
+      const res = await saveBrandProfile({
+        campaign_id: dashboardCampaign.id,
+        messages: brandChatMessages.map((m) => ({
+          role: m.role,
+          content: m.text,
+        })),
+      });
+
+      const text =
+        res.error_message ||
+        res.response ||
+        "Brand profile could not be saved.";
+      setBrandChatMessages((prev) => [...prev, { role: "assistant", text }]);
+
+      if (res.status === "success") {
+        await refreshCampaign();
+        void getBrands()
+          .then(setBrands)
+          .catch((error) => console.error(error));
+        showResult("Brand profile saved", text);
+      }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Something went wrong";
+      setBrandChatMessages((prev) => [...prev, { role: "assistant", text: err }]);
+      showResult("Error", err);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [dashboardCampaign, brandChatMessages, refreshCampaign, showResult]);
+
+  const runOrchestrator = useCallback(
+    async (message: string, busyKey: string) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before using the orchestrator.",
+        );
+        return;
+      }
+
+      setBusyAction(busyKey);
+      const history = orchestratorChatMessages.map((m) => ({
+        role: m.role,
+        content: m.text,
+      }));
+      setOrchestratorChatMessages((prev) => [
+        ...prev,
+        { role: "user", text: message },
+      ]);
+
+      try {
+        const res = await orchestrate({
+          campaign_id: dashboardCampaign.id,
+          message,
+          messages: history,
+        });
+        const body =
+          res.error_message ||
+          res.response ||
+          "Orchestrator did not return a response.";
+        const prefix = res.agent_label ? `[Routed to ${res.agent_label}]\n` : "";
+
+        const images = res.image_result?.images?.map((img) =>
+          resolveUploadUrl(img.image_url),
+        );
+        const videoUrl = res.video_result?.video_url
+          ? resolveUploadUrl(res.video_result.video_url)
+          : undefined;
+
+        if (res.image_result) {
+          setImageLastResult(res.image_result);
+        }
+        if (res.video_result) {
+          setVideoLastResult(res.video_result);
+        }
+
+        setOrchestratorChatMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            text: `${prefix}${body}`,
+            images: images && images.length ? images : undefined,
+            videoUrl,
+          },
+        ]);
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        setOrchestratorChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: err },
+        ]);
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, orchestratorChatMessages, showResult],
+  );
+
+  const handleOrchestratorChatSend = useCallback(
+    (message = orchestratorDraft) => {
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      setOrchestratorDraft("");
+      void runOrchestrator(trimmed, "orchchat");
+    },
+    [orchestratorDraft, runOrchestrator],
   );
 
   const runTextGenerate = useCallback(
@@ -1506,8 +1734,10 @@ export default function Dashboard() {
                     <OrchestratorPanel
                       campaign={dashboardCampaign}
                       brandAudience={dashboardBrandAudience}
+                      messages={orchestratorChatMessages}
+                      busyAction={busyAction}
                       onPickAgent={setActiveAgentId}
-                      onDemoAction={handleDemoAgentAction}
+                      onQuickAction={handleOrchestratorChatSend}
                     />
                   ) : activeAgentId === "market" ? (
                     <MarketPlannerPanel
@@ -1523,7 +1753,11 @@ export default function Dashboard() {
                     <BrandPanels
                       campaign={dashboardCampaign}
                       brandAudience={dashboardBrandAudience}
-                      onDemoAction={handleDemoAgentAction}
+                      messages={brandChatMessages}
+                      busyAction={busyAction}
+                      onQuickAction={handleBrandChatSend}
+                      onReport={handleBrandReport}
+                      onSaveProfile={handleBrandSaveProfile}
                     />
                   ) : activeAgentId === "calendar" ? (
                     <CalendarPanels
@@ -1593,6 +1827,16 @@ export default function Dashboard() {
               brandAudience={dashboardBrandAudience}
               nextActions={nextActions[activeAgentId]}
               onDemoAction={handleDemoAgentAction}
+              orchestratorChatMessages={orchestratorChatMessages}
+              orchestratorDraft={orchestratorDraft}
+              onOrchestratorDraftChange={setOrchestratorDraft}
+              onOrchestratorChatSend={handleOrchestratorChatSend}
+              brandChatMessages={brandChatMessages}
+              brandDraft={brandDraft}
+              onBrandDraftChange={setBrandDraft}
+              onBrandChatSend={handleBrandChatSend}
+              onBrandReport={handleBrandReport}
+              onBrandSaveProfile={handleBrandSaveProfile}
               onCalendarPlan14={handleCalendarPlan14}
               onCalendarBalance={handleCalendarBalance}
               onCalendarFindGaps={handleCalendarFindGaps}

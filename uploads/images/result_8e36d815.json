@@ -1,0 +1,26 @@
+{
+  "request_id": "8e36d815",
+  "brand_name": "GreenBean",
+  "campaign_goal": "Generate an image for my brand. Context: eco coffee launch",
+  "images": [
+    {
+      "image_id": "8e36d815-v1",
+      "request_id": "8e36d815",
+      "local_path": "uploads\\images\\8e36d815-v1.png",
+      "prompt_used": "\"Create a modern, professional Instagram ad for GreenBean's eco coffee launch, featuring a young professional enjoying a cup of coffee in natural lighting, with #2563EB and #7C3AED dominant, high contrast, and a clean composition with a single focal point.\"",
+      "ad_copy": "Fuel Your Revolution",
+      "platform": "instagram",
+      "size": "512x512",
+      "model_used": "runway-gen4_image",
+      "logo_applied": false,
+      "metadata": {
+        "brand": "GreenBean",
+        "campaign_goal": "Generate an image for my brand. Context: eco coffee launch",
+        "variation": 0
+      }
+    }
+  ],
+  "ab_test_ready": false,
+  "generation_time_sec": 29.78,
+  "knowledge_context": "Platform rules: Instagram ads: use bright vibrant colors, high contrast. Keep composition clean with single focal point. Lifestyle imagery with natural lighting works best.\nIndustry tips: Clean composition, brand colors dominant, single focal point, professional lighting."
+}

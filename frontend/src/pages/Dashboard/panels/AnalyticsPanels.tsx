@@ -32,7 +32,7 @@ export function AnalyticsPanels({
       <section className={`${PANEL_CLASS} p-5`}>
         <h2 className="text-2xl font-semibold">Performance Analytics</h2>
         <p className="mt-2 text-sm text-white/50">
-          Powered by POST /api/v1/agents/analytics/generate
+          Data-driven insights from your campaign performance.
         </p>
 
         {hasChatHistory ? (

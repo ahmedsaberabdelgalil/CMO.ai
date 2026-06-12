@@ -20,6 +20,16 @@ export function RightPanel({
   brandAudience,
   nextActions,
   onDemoAction,
+  orchestratorChatMessages,
+  orchestratorDraft,
+  onOrchestratorDraftChange,
+  onOrchestratorChatSend,
+  brandChatMessages,
+  brandDraft,
+  onBrandDraftChange,
+  onBrandChatSend,
+  onBrandReport,
+  onBrandSaveProfile,
   onCalendarPlan14,
   onCalendarBalance,
   onCalendarFindGaps,
@@ -65,6 +75,16 @@ export function RightPanel({
   brandAudience: string | null;
   nextActions: string[];
   onDemoAction: (agentId: AgentId, action: string) => void;
+  orchestratorChatMessages: ChatMessage[];
+  orchestratorDraft: string;
+  onOrchestratorDraftChange: (v: string) => void;
+  onOrchestratorChatSend: (message?: string) => void;
+  brandChatMessages: ChatMessage[];
+  brandDraft: string;
+  onBrandDraftChange: (v: string) => void;
+  onBrandChatSend: (message?: string) => void;
+  onBrandReport: () => void;
+  onBrandSaveProfile: () => void;
   onCalendarPlan14: () => void;
   onCalendarBalance: () => void;
   onCalendarFindGaps: () => void;
@@ -187,10 +207,14 @@ export function RightPanel({
       return;
     }
     if (activeAgent.id === "brand") {
-      onDemoAction("brand", action);
+      if (action === "Generate brand report") {
+        onBrandReport();
+        return;
+      }
+      onBrandChatSend(action);
       return;
     }
-    onDemoAction("orchestrator", action);
+    onOrchestratorChatSend(action);
   };
 
   if (activeAgent.id === "orchestrator") {
@@ -214,6 +238,46 @@ export function RightPanel({
             <div className="rounded-md bg-white/[0.07] px-3 py-2 text-sm leading-6 text-white/80">
               {getAgentDemoIntro("orchestrator", campaign, brandAudience)}
             </div>
+            {orchestratorChatMessages.slice(1).map((message, index) => (
+              <div
+                key={`orch-${message.role}-${index}`}
+                className={`rounded-md px-3 py-2 text-sm leading-6 ${
+                  message.role === "user"
+                    ? "ml-auto max-w-[88%] bg-neonBlue text-cosmic"
+                    : "mr-auto bg-white/[0.06] text-white/85"
+                }`}
+              >
+                <p className="break-words whitespace-pre-wrap">{message.text}</p>
+                {message.images?.length ? (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {message.images.map((src, i) => (
+                      <a
+                        key={`oimg-${i}`}
+                        href={src}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <img
+                          src={src}
+                          alt="Generated asset"
+                          className="w-full border rounded-md border-white/10"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+                {message.videoUrl ? (
+                  <video
+                    src={message.videoUrl}
+                    controls
+                    className="w-full mt-2 border rounded-md border-white/10"
+                  />
+                ) : null}
+              </div>
+            ))}
+            {busyAction === "orchchat" ? (
+              <p className="text-xs text-white/50">Orchestrator routing…</p>
+            ) : null}
             <SuggestionList
               suggestions={suggestions}
               onSelect={runSuggestion}
@@ -222,8 +286,9 @@ export function RightPanel({
               <button
                 key={action}
                 type="button"
-                onClick={() => onDemoAction("orchestrator", action)}
-                className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-white/10 text-white/70 hover:border-neonBlue/60 hover:text-white"
+                disabled={busyAction === "orchchat"}
+                onClick={() => onOrchestratorChatSend(action)}
+                className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-white/10 text-white/70 hover:border-neonBlue/60 hover:text-white disabled:opacity-50"
               >
                 {action}
               </button>
@@ -233,19 +298,19 @@ export function RightPanel({
             className="flex gap-2 p-4 border-t border-white/10"
             onSubmit={(e) => {
               e.preventDefault();
-              sendDemoRequest("Summarize campaign readiness");
+              onOrchestratorChatSend();
             }}
           >
             <Input
-              value={demoDraft}
-              onChange={(e) => setDemoDraft(e.target.value)}
-              placeholder="Ask Orchestrator"
+              value={orchestratorDraft}
+              onChange={(e) => onOrchestratorDraftChange(e.target.value)}
+              placeholder="Ask Orchestrator anything"
               className="bg-white h-11 border-white/10 text-cosmic placeholder:text-slate-500"
             />
             <Button
               type="submit"
               size="icon"
-              disabled={!demoDraft.trim()}
+              disabled={!orchestratorDraft.trim() || busyAction === "orchchat"}
               className="text-white h-11 w-11 bg-neonPink hover:bg-neonPink/90"
             >
               <Send className="size-4" />
@@ -279,6 +344,21 @@ export function RightPanel({
             <p className="text-sm text-white/70">
               {getAgentDemoIntro("brand", campaign, brandAudience)}
             </p>
+            {brandChatMessages.slice(1).map((message, index) => (
+              <div
+                key={`brand-${message.role}-${index}`}
+                className={`rounded-md px-3 py-2 text-sm leading-6 ${
+                  message.role === "user"
+                    ? "ml-auto max-w-[88%] bg-neonPurple text-white"
+                    : "mr-auto bg-white/[0.06] text-white/85"
+                }`}
+              >
+                <p className="break-words whitespace-pre-wrap">{message.text}</p>
+              </div>
+            ))}
+            {busyAction === "brandchat" || busyAction === "brandreport" ? (
+              <p className="text-xs text-white/50">Brand coach working…</p>
+            ) : null}
             <SuggestionList
               suggestions={suggestions}
               onSelect={runSuggestion}
@@ -287,30 +367,47 @@ export function RightPanel({
               <button
                 key={action}
                 type="button"
-                onClick={() => onDemoAction("brand", action)}
-                className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-white/10 text-white/70 hover:border-neonBlue/60 hover:text-white"
+                disabled={busyAction === "brandchat"}
+                onClick={() => onBrandChatSend(action)}
+                className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-white/10 text-white/70 hover:border-neonBlue/60 hover:text-white disabled:opacity-50"
               >
                 {action}
               </button>
             ))}
+            <button
+              type="button"
+              disabled={busyAction === "brandsave"}
+              onClick={onBrandSaveProfile}
+              className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-neonGreen/40 text-white/80 hover:border-neonGreen/70 hover:text-white disabled:opacity-50"
+            >
+              Save brand profile
+            </button>
+            <button
+              type="button"
+              disabled={busyAction === "brandreport"}
+              onClick={onBrandReport}
+              className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-neonPurple/40 text-white/80 hover:border-neonPurple/70 hover:text-white disabled:opacity-50"
+            >
+              Generate brand report
+            </button>
           </div>
           <form
             className="flex gap-2 p-4 border-t border-white/10"
             onSubmit={(e) => {
               e.preventDefault();
-              sendDemoRequest("Refine positioning");
+              onBrandChatSend();
             }}
           >
             <Input
-              value={demoDraft}
-              onChange={(e) => setDemoDraft(e.target.value)}
-              placeholder="Ask Brand"
+              value={brandDraft}
+              onChange={(e) => onBrandDraftChange(e.target.value)}
+              placeholder="Tell the brand coach about your business"
               className="bg-white h-11 border-white/10 text-cosmic placeholder:text-slate-500"
             />
             <Button
               type="submit"
               size="icon"
-              disabled={!demoDraft.trim()}
+              disabled={!brandDraft.trim() || busyAction === "brandchat"}
               className="text-white h-11 w-11 bg-neonPink hover:bg-neonPink/90"
             >
               <Send className="size-4" />

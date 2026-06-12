@@ -1,7 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import type { ContentAgentType, BrandOut, CampaignOut } from "../../types/api";
 
-export type ChatMessage = { role: "user" | "assistant"; text: string };
+export type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+  images?: string[];
+  videoUrl?: string;
+};
 
 export type AgentSuggestion = {
   title: string;

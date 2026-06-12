@@ -1,21 +1,28 @@
-import { ChevronRight, Megaphone } from "lucide-react";
+import { ChevronRight, Loader2, Megaphone } from "lucide-react";
 import type { CampaignOut } from "../../../types/api";
 import { agents, nextActions, PANEL_CLASS, SUBPANEL_CLASS } from "../constants";
-import type { AgentId } from "../types";
+import type { AgentId, ChatMessage } from "../types";
 import { formatLaunchDate, getAgentDemoIntro } from "../utils";
 
 export function OrchestratorPanel({
   campaign,
   brandAudience,
+  messages,
+  busyAction,
   onPickAgent,
-  onDemoAction,
+  onQuickAction,
 }: {
   campaign: CampaignOut;
   brandAudience: string | null;
+  messages: ChatMessage[];
+  busyAction: string | null;
   onPickAgent: (agentId: AgentId) => void;
-  onDemoAction: (agentId: AgentId, action: string) => void;
+  onQuickAction: (action: string) => void;
 }) {
   const launch = formatLaunchDate(campaign.start_date);
+  const isGenerating = busyAction === "orchchat";
+  const hasChatHistory = messages.length > 1;
+  const visibleMessages = hasChatHistory ? messages.slice(1) : messages;
 
   return (
     <div className="space-y-5">
@@ -23,18 +30,77 @@ export function OrchestratorPanel({
         <div className={`${PANEL_CLASS} p-5 lg:col-span-2`}>
           <div className="flex items-center gap-2 text-neonBlue">
             <Megaphone className="size-5" />
-            <h2 className="text-lg font-semibold">Orchestrator Queue</h2>
+            <h2 className="text-lg font-semibold">Orchestrator</h2>
           </div>
-          <p className="mt-4 text-sm leading-6 text-white/70">
+          <p className="mt-3 text-sm leading-6 text-white/70">
             {getAgentDemoIntro("orchestrator", campaign, brandAudience)}
           </p>
+
+          {hasChatHistory ? (
+            <div className="mt-4 max-h-96 overflow-y-auto rounded-md border border-white/10 bg-[#0D1018] p-3 text-sm leading-6 text-white/80">
+              <div className="space-y-3">
+                {visibleMessages.map((message, index) => (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={`rounded-md px-3 py-2 ${
+                      message.role === "user"
+                        ? "ml-auto max-w-[88%] bg-neonBlue text-cosmic"
+                        : "mr-auto max-w-full bg-white/[0.06] text-white/85"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap break-words">
+                      {message.text}
+                    </p>
+                    {message.images?.length ? (
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        {message.images.map((src, i) => (
+                          <a
+                            key={`img-${i}`}
+                            href={src}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={src}
+                              alt="Generated asset"
+                              className="w-full border rounded-md border-white/10"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+                    {message.videoUrl ? (
+                      <video
+                        src={message.videoUrl}
+                        controls
+                        className="w-full mt-3 border rounded-md border-white/10"
+                      />
+                    ) : null}
+                  </div>
+                ))}
+                {isGenerating ? (
+                  <p className="flex items-center gap-2 text-sm text-white/60">
+                    <Loader2 className="size-4 animate-spin" />
+                    Orchestrator routing…
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : isGenerating ? (
+            <p className="mt-4 flex items-center gap-2 text-sm text-white/60">
+              <Loader2 className="size-4 animate-spin" />
+              Orchestrator routing…
+            </p>
+          ) : null}
+
           <div className="grid gap-2 mt-4 md:grid-cols-3">
             {nextActions.orchestrator.map((action) => (
               <button
                 key={action}
                 type="button"
-                onClick={() => onDemoAction("orchestrator", action)}
-                className={`${SUBPANEL_CLASS} px-3 py-2 text-left text-xs text-white/85 transition hover:border-neonBlue/60 hover:text-white`}
+                disabled={isGenerating}
+                onClick={() => onQuickAction(action)}
+                className={`${SUBPANEL_CLASS} px-3 py-2 text-left text-xs text-white/85 transition hover:border-neonBlue/60 hover:text-white disabled:opacity-50`}
               >
                 {action}
               </button>
@@ -83,7 +149,7 @@ export function OrchestratorPanel({
                   <ChevronRight className="size-4 shrink-0 text-white/35" />
                 </div>
                 <p className="mt-4 text-xs font-medium text-white/55">
-                  Ready for campaign demo
+                  Open agent
                 </p>
               </button>
             );

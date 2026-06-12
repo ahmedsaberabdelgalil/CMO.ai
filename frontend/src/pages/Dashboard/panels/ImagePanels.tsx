@@ -39,7 +39,7 @@ export function ImagePanels({
           ) : null}
         </div>
         <p className="mt-2 text-sm text-white/50">
-          Powered by POST /api/v1/agents/image/generate
+          Generate campaign visuals and creative asset briefs.
         </p>
 
         {isGenerating ? (

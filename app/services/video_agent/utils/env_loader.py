@@ -7,8 +7,20 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-ENV_PATH = PROJECT_ROOT / ".env"
+
+def _find_env_path() -> Path:
+    """Walk up from this file to locate the project-root .env file."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / ".env"
+        if candidate.exists():
+            return candidate
+    # Best-effort default: project root is 5 levels up
+    # (utils -> video_agent -> services -> app -> project root).
+    return here.parents[4] / ".env"
+
+
+ENV_PATH = _find_env_path()
 
 _loaded = False
 
@@ -18,7 +30,7 @@ def load_project_env() -> None:
     global _loaded
     if _loaded:
         return
-    load_dotenv(ENV_PATH, override=True)
+    load_dotenv(ENV_PATH, override=False)
     _loaded = True
 
 

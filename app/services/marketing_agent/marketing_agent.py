@@ -6,7 +6,7 @@ import re
 
 def _get_llm():
     return ChatGroq(
-        model_name="openai/gpt-oss-120b",
+        model=settings.GROQ_MODEL,
         temperature=0.4,
         groq_api_key=settings.GROQ_API_KEY,
     )

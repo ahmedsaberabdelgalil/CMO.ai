@@ -50,7 +50,7 @@ export function TextPanels({
           ) : null}
         </div>
         <p className="mt-2 text-sm text-white/50">
-          Powered by POST /api/v1/agents/content/generate
+          Write posts, ads, emails, and landing copy on brand.
         </p>
         {hasChatHistory ? (
           <div className="mt-4 max-h-96 overflow-y-auto rounded-md border border-white/10 bg-[#0D1018] p-3 text-sm leading-6 text-white/80">

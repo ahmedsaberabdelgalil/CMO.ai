@@ -1,0 +1,26 @@
+{
+  "request_id": "486f7b4a",
+  "brand_name": "Veltrix",
+  "campaign_goal": "Minimalist luxury brand poster for VELTRIX, bold modern typography centered on a clean dark background with subtle electric blue and purple glow accents, premium tech aesthetic, negative space, futuristic yet elegant, Apple-style branding, ultra-clean composition, high-end corporate design.  Tagline: \"Designing the Future of Digital Growth.\". Context: Introducing Veltrix — a modern digital brand built for ambitious startups and next-generation businesses. This campaign focuses on building brand awareness, showcasing innovation-driven design and technology, and positioning Veltrix as a bold creative partner for businesses that want to stand out in the digital world.",
+  "images": [
+    {
+      "image_id": "486f7b4a-v1",
+      "request_id": "486f7b4a",
+      "local_path": "uploads\\images\\486f7b4a-v1.png",
+      "prompt_used": "\"Veltrix logo, bold modern typography, centered on dark background, #2563EB and #7C3AED glow accents, clean composition, minimalist luxury, futuristic, elegant, high-end corporate design, 'Designing the Future of Digital Growth' tagline, ultra-clean, negative space, premium tech aesthetic.\"",
+      "ad_copy": "Elevate Your Digital Empire",
+      "platform": "instagram",
+      "size": "512x512",
+      "model_used": "runway-gen4_image",
+      "logo_applied": false,
+      "metadata": {
+        "brand": "Veltrix",
+        "campaign_goal": "Minimalist luxury brand poster for VELTRIX, bold modern typography centered on a clean dark background with subtle electric blue and purple glow accents, premium tech aesthetic, negative space, futuristic yet elegant, Apple-style branding, ultra-clean composition, high-end corporate design.  Tagline: \"Designing the Future of Digital Growth.\". Context: Introducing Veltrix — a modern digital brand built for ambitious startups and next-generation businesses. This campaign focuses on building brand awareness, showcasing innovation-driven design and technology, and positioning Veltrix as a bold creative partner for businesses that want to stand out in the digital world.",
+        "variation": 0
+      }
+    }
+  ],
+  "ab_test_ready": false,
+  "generation_time_sec": 30.32,
+  "knowledge_context": "Platform rules: Instagram ads: use bright vibrant colors, high contrast. Keep composition clean with single focal point. Lifestyle imagery with natural lighting works best.\nIndustry tips: Dark background with glowing UI, gradient blues and purples, geometric shapes."
+}

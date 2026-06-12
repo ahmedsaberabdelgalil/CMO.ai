@@ -32,7 +32,7 @@ export function CalendarPanels({
       <section className={`${PANEL_CLASS} p-5`}>
         <h2 className="text-2xl font-semibold">Market Calendar</h2>
         <p className="mt-2 text-sm text-white/50">
-          Powered by POST /api/v1/agents/calendar/generate
+          Plan, balance, and review your content schedule.
         </p>
 
         {hasChatHistory ? (

@@ -323,3 +323,43 @@ export interface AnalyticsAgentResponse {
   response?: string | null;
   error_message?: string | null;
 }
+
+export interface AgentChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface BrandAgentRequest {
+  campaign_id: number;
+  messages: AgentChatTurn[];
+}
+
+export interface BrandAgentResponse {
+  status: string;
+  response?: string | null;
+  error_message?: string | null;
+}
+
+export interface BrandSaveResponse {
+  status: string;
+  response?: string | null;
+  saved_fields: Record<string, string>;
+  error_message?: string | null;
+}
+
+export interface OrchestratorAgentRequest {
+  campaign_id: number;
+  message: string;
+  messages?: AgentChatTurn[];
+}
+
+export interface OrchestratorAgentResponse {
+  status: string;
+  agent?: string | null;
+  agent_label?: string | null;
+  reason?: string | null;
+  response?: string | null;
+  error_message?: string | null;
+  image_result?: ImageAgentResponse | null;
+  video_result?: VideoAgentResponse | null;
+}

@@ -21,7 +21,17 @@ from app.api.v1 import (
     strategies,
     users,
 )
-from app.api.v1.agents import analytics_agent, calendar, content, image, marketing, video
+from app.api.v1.agents import (
+    analytics_agent,
+    brand,
+    calendar,
+    chatbot,
+    content,
+    image,
+    marketing,
+    orchestrator,
+    video,
+)
 
 api_router = APIRouter()
 
@@ -43,4 +53,7 @@ api_router.include_router(video.router)
 api_router.include_router(marketing.router)
 api_router.include_router(calendar.router)
 api_router.include_router(analytics_agent.router)
+api_router.include_router(brand.router)
+api_router.include_router(chatbot.router)
+api_router.include_router(orchestrator.router)
 

@@ -102,7 +102,7 @@ export function MarketPlannerPanel({
             financial projections, and a full CMO plan via the marketing agent.
           </p>
           <p className="mt-1 text-xs text-white/45">
-            Powered by POST /api/v1/agents/marketing/generate
+            Turn your business inputs into a structured marketing plan.
           </p>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
