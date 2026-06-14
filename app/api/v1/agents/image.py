@@ -181,3 +181,42 @@ async def generate_image(
         ) from e
 
     return _result_to_response(output)
+
+
+@router.post("/generate-async")
+async def generate_image_async(
+    data: ImageAgentRequest,
+    current_user: User = Depends(get_current_user_async),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Start image generation in the background; poll GET /jobs/{job_id}."""
+    from app.services.jobs import job_manager
+
+    result = await db.execute(select(Campaign).where(Campaign.id == data.campaign_id))
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    brand_result = await db.execute(select(Brand).where(Brand.id == campaign.brand_id))
+    brand = brand_result.scalar_one_or_none()
+
+    campaign_goal = data.message.strip()
+    if campaign.description and campaign.description not in campaign_goal:
+        campaign_goal = f"{campaign_goal}. Context: {campaign.description}"
+
+    agent_request = ImageRequest(
+        brand=_build_brand_profile(brand),
+        campaign_goal=campaign_goal,
+        platform=_PLATFORM_MAP.get(data.platform, AdPlatform.INSTAGRAM),
+        image_size=_SIZE_MAP.get(data.image_size, ImageSize.SQUARE),
+        num_variations=data.num_variations,
+        ad_copy=data.ad_copy or "",
+        logo=LogoConfig(enabled=data.logo_enabled, position=LogoPosition.BOTTOM_RIGHT),
+    )
+
+    async def _work():
+        output = await asyncio.to_thread(run_image_agent, agent_request)
+        return _result_to_response(output).model_dump()
+
+    job = job_manager.create("image", _work, owner_id=current_user.id)
+    return {"job_id": job.id, "status": job.status}

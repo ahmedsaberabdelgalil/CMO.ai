@@ -1,4 +1,5 @@
 import { request } from "../lib/api";
+import { pollJob, startJob } from "./jobsService";
 import type {
   ImageAgentRequest,
   ImageAgentResponse,
@@ -18,4 +19,11 @@ export async function generateImage(
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export async function generateImageAsync(
+  data: ImageAgentRequest
+): Promise<ImageAgentResponse> {
+  const { job_id } = await startJob("/agents/image/generate-async", data);
+  return pollJob<ImageAgentResponse>(job_id);
 }

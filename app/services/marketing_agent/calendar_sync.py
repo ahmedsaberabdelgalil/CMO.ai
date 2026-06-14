@@ -164,3 +164,89 @@ async def link_marketing_plan_to_campaign(
     await db.refresh(campaign)
     await db.refresh(strategy)
     return strategy.id, items_created
+
+
+async def apply_calendar_items(
+    db: AsyncSession,
+    *,
+    strategy_id: int,
+    brand_id: int,
+    goal: str,
+    items: list[dict],
+    days: int = 14,
+) -> int:
+    """
+    Persist agent-generated calendar items into the strategy's schedule,
+    replacing items in the affected date window. Returns the count created.
+    """
+    result = await db.execute(
+        select(MarketingStrategy).where(
+            MarketingStrategy.id == strategy_id,
+            MarketingStrategy.brand_id == brand_id,
+        )
+    )
+    strategy = result.scalar_one_or_none()
+    if strategy is None:
+        raise ValueError("Strategy not found for this brand.")
+
+    start = date.today()
+    end = start + timedelta(days=days - 1)
+
+    schedule_result = await db.execute(
+        select(ContentSchedule)
+        .where(ContentSchedule.strategy_id == strategy.id)
+        .order_by(ContentSchedule.created_at.desc())
+        .limit(1)
+    )
+    schedule = schedule_result.scalar_one_or_none()
+    if schedule is None:
+        schedule = ContentSchedule(
+            plan_type=PlanType.weekly,
+            start_date=start,
+            end_date=end,
+            strategy_id=strategy.id,
+        )
+        db.add(schedule)
+        await db.flush()
+    else:
+        schedule.start_date = start
+        schedule.end_date = end
+
+    await db.execute(
+        delete(ContentItem).where(
+            ContentItem.schedule_id == schedule.id,
+            ContentItem.scheduled_date >= start,
+            ContentItem.scheduled_date <= end,
+        )
+    )
+
+    items_created = 0
+    for raw in items:
+        try:
+            offset = int(raw.get("day_offset", items_created))
+        except (TypeError, ValueError):
+            offset = items_created
+        offset = max(0, min(offset, days - 1))
+        scheduled = start + timedelta(days=offset)
+        platform = _map_platform(str(raw.get("platform", "Instagram")))
+        title = (str(raw.get("title", "")).strip() or "Content post")[:300]
+        objective = (str(raw.get("objective", goal)).strip() or goal)[:300]
+        caption = str(raw.get("caption", "")).strip()[:2000]
+
+        db.add(
+            ContentItem(
+                title=title,
+                content_type=ContentType.post,
+                platform=platform,
+                objective=objective,
+                body_text=caption,
+                scheduled_date=scheduled,
+                scheduled_time="10:00",
+                status=ContentStatus.Draft,
+                schedule_id=schedule.id,
+            )
+        )
+        items_created += 1
+
+    await db.commit()
+    return items_created

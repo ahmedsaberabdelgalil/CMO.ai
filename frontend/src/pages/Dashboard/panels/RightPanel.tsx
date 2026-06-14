@@ -4,7 +4,11 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import type { BrandOut, CampaignOut } from "../../../types/api";
 import type { Agent, AgentId, ChatMessage } from "../types";
-import { buildAgentSuggestions, getAgentDemoIntro } from "../utils";
+import {
+  buildAgentSuggestions,
+  buildBrandPrompts,
+  getAgentDemoIntro,
+} from "../utils";
 import { SuggestionList } from "../components/SuggestionList";
 import { TextRightAside } from "./TextRightAside";
 import { ImageRightAside } from "./ImageRightAside";
@@ -22,6 +26,7 @@ export function RightPanel({
   onDemoAction,
   orchestratorChatMessages,
   orchestratorDraft,
+  orchestratorFollowups,
   onOrchestratorDraftChange,
   onOrchestratorChatSend,
   brandChatMessages,
@@ -29,6 +34,7 @@ export function RightPanel({
   onBrandDraftChange,
   onBrandChatSend,
   onBrandReport,
+  onBrandReportExport,
   onBrandSaveProfile,
   onCalendarPlan14,
   onCalendarBalance,
@@ -77,6 +83,7 @@ export function RightPanel({
   onDemoAction: (agentId: AgentId, action: string) => void;
   orchestratorChatMessages: ChatMessage[];
   orchestratorDraft: string;
+  orchestratorFollowups: string[];
   onOrchestratorDraftChange: (v: string) => void;
   onOrchestratorChatSend: (message?: string) => void;
   brandChatMessages: ChatMessage[];
@@ -84,6 +91,7 @@ export function RightPanel({
   onBrandDraftChange: (v: string) => void;
   onBrandChatSend: (message?: string) => void;
   onBrandReport: () => void;
+  onBrandReportExport: () => void;
   onBrandSaveProfile: () => void;
   onCalendarPlan14: () => void;
   onCalendarBalance: () => void;
@@ -278,11 +286,17 @@ export function RightPanel({
             {busyAction === "orchchat" ? (
               <p className="text-xs text-white/50">Orchestrator routing…</p>
             ) : null}
-            <SuggestionList
-              suggestions={suggestions}
-              onSelect={runSuggestion}
-            />
-            {nextActions.map((action) => (
+            {orchestratorFollowups.length ? (
+              <p className="pt-1 text-xs uppercase tracking-[0.16em] text-white/35">
+                Suggested next steps
+              </p>
+            ) : (
+              <SuggestionList suggestions={suggestions} onSelect={runSuggestion} />
+            )}
+            {(orchestratorFollowups.length
+              ? orchestratorFollowups
+              : nextActions
+            ).map((action) => (
               <button
                 key={action}
                 type="button"
@@ -363,7 +377,7 @@ export function RightPanel({
               suggestions={suggestions}
               onSelect={runSuggestion}
             />
-            {nextActions.map((action) => (
+            {buildBrandPrompts(campaign, brand).map((action) => (
               <button
                 key={action}
                 type="button"
@@ -389,6 +403,16 @@ export function RightPanel({
               className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-neonPurple/40 text-white/80 hover:border-neonPurple/70 hover:text-white disabled:opacity-50"
             >
               Generate brand report
+            </button>
+            <button
+              type="button"
+              disabled={busyAction === "brandexport"}
+              onClick={onBrandReportExport}
+              className="w-full px-3 py-2 text-xs text-left transition border rounded-md border-white/15 text-white/80 hover:border-white/40 hover:text-white disabled:opacity-50"
+            >
+              {busyAction === "brandexport"
+                ? "Preparing…"
+                : "Download report (Word)"}
             </button>
           </div>
           <form

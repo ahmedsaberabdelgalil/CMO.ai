@@ -16,6 +16,8 @@ from app.api.v1 import (
     campaigns,
     content_calendar,
     dashboard,
+    export,
+    jobs,
     notifications,
     quick_actions,
     strategies,
@@ -56,4 +58,6 @@ api_router.include_router(analytics_agent.router)
 api_router.include_router(brand.router)
 api_router.include_router(chatbot.router)
 api_router.include_router(orchestrator.router)
+api_router.include_router(export.router)
+api_router.include_router(jobs.router)
 

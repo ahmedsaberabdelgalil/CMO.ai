@@ -199,6 +199,26 @@ BRAND_FIELDS = (
 )
 
 
+def suggest_brand_prompts(
+    *,
+    brand_name: str = "your brand",
+    audience: str = "your audience",
+) -> list[str]:
+    """
+    Return ready-to-run prompt options the user can send to the agents after
+    saving their brand profile. Static + personalized for instant, reliable UX.
+    """
+    name = (brand_name or "your brand").strip() or "your brand"
+    aud = (audience or "your audience").strip() or "your audience"
+    return [
+        f"Create a brand voice guide for {name}.",
+        f"Write 3 key brand messages for {name} aimed at {aud}.",
+        f"List the main objections {aud} may have and how to answer them.",
+        f"Draft a one-sentence positioning statement for {name}.",
+        f"Suggest the best marketing channels for {name} to reach {aud}.",
+    ]
+
+
 def extract_brand_profile(*, history: list[dict]) -> dict:
     """
     Extract structured brand fields from the coaching conversation.

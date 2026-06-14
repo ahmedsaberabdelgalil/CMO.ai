@@ -56,6 +56,69 @@ def _extract_json(text: str) -> dict | None:
         return None
 
 
+PLANNER_SYSTEM = """You are the Orchestrator planner for CMO.AI, a virtual Chief Marketing Officer system.
+
+Break the user's request into an ORDERED list of 1 to 4 steps. Each step assigns ONE specialist agent a concrete sub-task written as a clear instruction.
+
+Use MULTIPLE steps ONLY when the request clearly asks for more than one deliverable
+(e.g. "create a plan and then design an image", "write a caption and a video script").
+For a single deliverable, return EXACTLY ONE step.
+
+Available agents:
+- content: social posts, ads, emails, captions, marketing copy
+- image: image/visual generation, creative briefs
+- video: video scripts, storyboards, reels, creator briefs
+- marketing: full marketing strategy, content pillars, budget plans, go-to-market
+- calendar: content calendar planning, scheduling, posting cadence
+- analytics: performance analysis, metrics, funnel diagnosis, budget reallocation
+- brand: brand positioning, identity, voice, audience definition
+- chatbot: general marketing questions, platform help, anything else
+
+Respond ONLY with a single line of valid JSON in this exact format:
+{"steps": [{"agent": "<agent name>", "task": "<sub-task instruction>"}]}"""
+
+
+def plan_steps(message: str, recent_context: str = "") -> list[dict]:
+    """
+    Decompose a request into an ordered list of {"agent", "task"} steps.
+
+    Returns a single-step plan for simple requests and a multi-step plan only
+    when the request clearly needs several deliverables. Falls back to one
+    routing decision (or the chatbot) when planning is unavailable.
+    """
+    if recent_context.strip():
+        user_content = (
+            "Recent conversation:\n"
+            f"{recent_context}\n\n"
+            f"Latest user message: {message}\n\n"
+            "Plan the steps needed to fulfill the latest user message."
+        )
+    else:
+        user_content = message
+
+    text = run_chat(
+        PLANNER_SYSTEM,
+        [{"role": "user", "content": user_content}],
+        temperature=0.0,
+    )
+
+    parsed = _extract_json(text) if text else None
+    steps: list[dict] = []
+    if parsed and isinstance(parsed.get("steps"), list):
+        for raw in parsed["steps"][:4]:
+            agent = str(raw.get("agent", "")).strip().lower()
+            task = str(raw.get("task", "")).strip() or message
+            if agent in VALID_AGENTS:
+                steps.append({"agent": agent, "task": task})
+
+    if steps:
+        return steps
+
+    # Fall back to single-intent routing, then to the chatbot.
+    routed = route_intent(message, recent_context)
+    return [{"agent": routed["agent"], "task": message}]
+
+
 def route_intent(message: str, recent_context: str = "") -> dict:
     """
     Decide which agent should handle the latest message.

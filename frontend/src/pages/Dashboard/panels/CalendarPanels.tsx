@@ -11,6 +11,7 @@ export function CalendarPanels({
   onPlan14,
   onBalance,
   onFindGaps,
+  onApply,
 }: {
   busyAction: string | null;
   lastResult: CalendarAgentResponse | null;
@@ -18,12 +19,14 @@ export function CalendarPanels({
   onPlan14: () => void;
   onBalance: () => void;
   onFindGaps: () => void;
+  onApply: (message?: string) => void;
 }) {
   const isGenerating =
     busyAction === "cal14" ||
     busyAction === "calbalance" ||
     busyAction === "calgaps" ||
-    busyAction === "calchat";
+    busyAction === "calchat" ||
+    busyAction === "calapply";
   const hasChatHistory = messages.length > 1;
   const visibleMessages = hasChatHistory ? messages.slice(1) : messages;
 
@@ -94,6 +97,20 @@ export function CalendarPanels({
             label="Find calendar gaps"
             loading={busyAction === "calgaps"}
             onClick={onFindGaps}
+          />
+        </div>
+        <p className="mt-5 text-xs uppercase tracking-[0.16em] text-white/40">
+          Save to calendar
+        </p>
+        <p className="mt-2 text-xs leading-5 text-white/55">
+          Generate a concrete 14-day schedule and write it to your campaign
+          calendar.
+        </p>
+        <div className="mt-3">
+          <ActionRow
+            label="Generate & save 14-day schedule"
+            loading={busyAction === "calapply"}
+            onClick={() => onApply("")}
           />
         </div>
       </section>

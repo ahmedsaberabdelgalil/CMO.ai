@@ -11,12 +11,15 @@ from app.models.user import User
 from app.schemas.agents.brand_agent import (
     BrandAgentRequest,
     BrandAgentResponse,
+    BrandProfileRequest,
+    BrandProfileResponse,
     BrandSaveResponse,
 )
 from app.services.brand_agent import (
     extract_brand_profile,
     generate_brand_report,
     run_brand_coaching,
+    suggest_brand_prompts,
 )
 
 router = APIRouter(prefix="/agents/brand", tags=["Brand Agent"])
@@ -133,5 +136,71 @@ async def save_brand_profile(
         status="success",
         response=summary,
         saved_fields=saved,
+        error_message=None,
+    )
+
+
+@router.post("/profile", response_model=BrandProfileResponse)
+async def save_structured_brand_profile(
+    data: BrandProfileRequest,
+    current_user: User = Depends(get_current_user_async),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Save a brand profile from the structured questionnaire and return prompt options."""
+    result = await db.execute(select(Campaign).where(Campaign.id == data.campaign_id))
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    brand_result = await db.execute(select(Brand).where(Brand.id == campaign.brand_id))
+    brand = brand_result.scalar_one_or_none()
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found for this campaign")
+    if brand.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this brand")
+
+    fields = {
+        "brand_name": data.brand_name.strip(),
+        "industry": data.industry.strip(),
+        "target_audience": data.target_audience.strip(),
+        "value_proposition": data.value_proposition.strip(),
+        "tone_of_voice": data.tone_of_voice.strip(),
+        "positioning": data.positioning.strip(),
+    }
+
+    saved: dict[str, str] = {}
+    for field, value in fields.items():
+        # brand_name is required on the model; never blank it out.
+        if not value and field == "brand_name":
+            continue
+        if value:
+            setattr(brand, field, value)
+            saved[field] = value
+
+    if not saved:
+        return BrandProfileResponse(
+            status="error",
+            response=None,
+            saved_fields={},
+            suggestions=[],
+            error_message="Fill in at least one brand field before saving.",
+        )
+
+    await db.commit()
+    await db.refresh(brand)
+
+    suggestions = suggest_brand_prompts(
+        brand_name=brand.brand_name,
+        audience=brand.target_audience or "your audience",
+    )
+
+    summary_lines = [f"{FIELD_LABELS.get(k, k)}: {v}" for k, v in saved.items()]
+    summary = "Saved your brand profile:\n" + "\n".join(summary_lines)
+
+    return BrandProfileResponse(
+        status="success",
+        response=summary,
+        saved_fields=saved,
+        suggestions=suggestions,
         error_message=None,
     )

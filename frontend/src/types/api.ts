@@ -313,9 +313,24 @@ export interface CalendarAgentResponse {
   error_message?: string | null;
 }
 
-export interface AnalyticsAgentRequest {
-  message: string;
+export interface CalendarApplyRequest {
   campaign_id: number;
+  message?: string;
+  days?: number;
+}
+
+export interface CalendarApplyResponse {
+  status: string;
+  items_created: number;
+  response?: string | null;
+  error_message?: string | null;
+}
+
+export interface AnalyticsAgentRequest {
+  message?: string;
+  campaign_id: number;
+  focus?: string | null;
+  metrics?: Record<string, number> | null;
 }
 
 export interface AnalyticsAgentResponse {
@@ -347,10 +362,29 @@ export interface BrandSaveResponse {
   error_message?: string | null;
 }
 
+export interface BrandProfileRequest {
+  campaign_id: number;
+  brand_name?: string;
+  industry?: string;
+  target_audience?: string;
+  value_proposition?: string;
+  tone_of_voice?: string;
+  positioning?: string;
+}
+
+export interface BrandProfileResponse {
+  status: string;
+  response?: string | null;
+  saved_fields: Record<string, string>;
+  suggestions: string[];
+  error_message?: string | null;
+}
+
 export interface OrchestratorAgentRequest {
   campaign_id: number;
   message: string;
   messages?: AgentChatTurn[];
+  force_agent?: string | null;
 }
 
 export interface OrchestratorAgentResponse {
@@ -360,6 +394,9 @@ export interface OrchestratorAgentResponse {
   reason?: string | null;
   response?: string | null;
   error_message?: string | null;
+  agents?: string[];
+  suggestions?: string[];
   image_result?: ImageAgentResponse | null;
   video_result?: VideoAgentResponse | null;
+  marketing_result?: MarketingAgentResponse | null;
 }

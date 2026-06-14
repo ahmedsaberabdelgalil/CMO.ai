@@ -7,6 +7,36 @@ import type {
 } from "../../types/api";
 import type { AgentId, AgentSuggestion } from "./types";
 
+export function buildBrandPrompts(
+  campaign: CampaignOut | null,
+  brand: BrandOut | null,
+): string[] {
+  const brandName = brand?.brand_name?.trim() || "this brand";
+  const audience = brand?.target_audience?.trim() || "the core audience";
+  const industry = brand?.industry?.trim() || "the market";
+  const campaignName = campaign?.name?.trim() || "this campaign";
+  const hasProfile = Boolean(
+    brand?.value_proposition?.trim() || brand?.positioning?.trim(),
+  );
+
+  if (!hasProfile) {
+    return [
+      `What does ${brandName} do and who is it for?`,
+      `Help me define the value proposition for ${brandName}.`,
+      `What tone of voice fits ${brandName} in ${industry}?`,
+      `Who exactly is the target audience for ${brandName}?`,
+    ];
+  }
+
+  return [
+    `Refine the positioning for ${brandName} into one sentence.`,
+    `Create a brand voice guide for ${audience}.`,
+    `Write 3 key brand messages for ${brandName} in ${industry}.`,
+    `List the objections ${audience} have before buying.`,
+    `Align ${brandName}'s message with ${campaignName}.`,
+  ];
+}
+
 export function buildAgentSuggestions(
   agentId: AgentId,
   campaign: CampaignOut | null,

@@ -118,3 +118,45 @@ async def generate_video(
         ) from e
 
     return _map_output(output)
+
+
+@router.post("/generate-async")
+async def generate_video_async(
+    data: VideoAgentRequest,
+    current_user: User = Depends(get_current_user_async),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Start video generation in the background; poll GET /jobs/{job_id}."""
+    from app.services.jobs import job_manager
+
+    result = await db.execute(select(Campaign).where(Campaign.id == data.campaign_id))
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    brand_result = await db.execute(select(Brand).where(Brand.id == campaign.brand_id))
+    brand = brand_result.scalar_one_or_none()
+
+    brand_dict = {
+        "brand_name": brand.brand_name if brand else "",
+        "industry": brand.industry if brand else "",
+        "target_audience": brand.target_audience if brand else "",
+        "tone_of_voice": brand.tone_of_voice if brand else "professional",
+    }
+    campaign_dict = {"name": campaign.name, "description": campaign.description}
+    prompt = build_prompt(
+        brand=brand_dict, campaign=campaign_dict, user_message=data.message
+    )
+
+    async def _work():
+        output = await asyncio.to_thread(
+            run_video_agent,
+            prompt,
+            brand=brand_dict,
+            campaign=campaign_dict,
+            user_message=data.message,
+        )
+        return _map_output(output).model_dump()
+
+    job = job_manager.create("video", _work, owner_id=current_user.id)
+    return {"job_id": job.id, "status": job.status}

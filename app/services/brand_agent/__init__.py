@@ -2,6 +2,12 @@ from app.services.brand_agent.brand_agent import (
     extract_brand_profile,
     generate_brand_report,
     run_brand_coaching,
+    suggest_brand_prompts,
 )
 
-__all__ = ["run_brand_coaching", "generate_brand_report", "extract_brand_profile"]
+__all__ = [
+    "run_brand_coaching",
+    "generate_brand_report",
+    "extract_brand_profile",
+    "suggest_brand_prompts",
+]

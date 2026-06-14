@@ -4,14 +4,28 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
+from app.core.observability import (
+    RequestContextMiddleware,
+    init_sentry,
+    setup_logging,
+)
+
+from app.core.config import settings
+
+setup_logging(settings.LOG_LEVEL)
+init_sentry()
 
 app = FastAPI(
     title="CMO.ai API",
     description="AI-powered marketing platform API",
     version="1.0.0",
 )
+
+# ── Observability ─────────────────────────────────────────────
+app.add_middleware(RequestContextMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────
 app.add_middleware(
@@ -41,7 +55,26 @@ ahmedsaber@test.com
 '''
 
 
-# ── Health check ──────────────────────────────────────────────
+# ── Health checks ─────────────────────────────────────────────
 @app.get("/health", tags=["Health"])
 def health_check():
+    """Liveness probe — process is up."""
     return {"status": "ok"}
+
+
+@app.get("/health/ready", tags=["Health"])
+async def readiness_check():
+    """Readiness probe — verifies database connectivity."""
+    from app.db.session import async_engine
+
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "ok"}
+    except Exception as exc:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "database": "error", "detail": str(exc)},
+        )

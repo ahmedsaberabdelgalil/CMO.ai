@@ -13,7 +13,8 @@ from app.schemas.agents.orchestrator_agent import (
     OrchestratorAgentRequest,
     OrchestratorAgentResponse,
 )
-from app.services.orchestrator_agent import route_intent
+from app.services.orchestrator_agent import VALID_AGENTS, plan_steps
+from app.services.campaign_context import build_campaign_context
 
 router = APIRouter(prefix="/agents/orchestrator", tags=["Orchestrator Agent"])
 
@@ -62,25 +63,134 @@ async def orchestrate(
 
     history = [turn.model_dump() for turn in data.messages]
     recent_context = _recent_context(history)
+    shared_context = await build_campaign_context(db, campaign, brand)
 
-    routing = await asyncio.to_thread(route_intent, message, recent_context)
-    agent = routing["agent"]
-    reason = routing.get("reason", "")
+    # Decide the step plan: a forced agent, or an LLM-planned 1–4 step sequence.
+    if data.force_agent and data.force_agent.strip().lower() in VALID_AGENTS:
+        steps = [{"agent": data.force_agent.strip().lower(), "task": message}]
+    else:
+        steps = await asyncio.to_thread(plan_steps, message, recent_context)
 
-    output = await _dispatch(
-        agent, message, history, campaign, brand, ctx, current_user.id, db
-    )
+    parts: list[str] = []
+    agents_used: list[str] = []
+    image_result = None
+    video_result = None
+    marketing_result = None
+    overall_status = "success"
+    first_error: str | None = None
+    running_history = list(history)
+    multi = len(steps) > 1
+
+    for step in steps:
+        step_agent = step["agent"]
+        task = step["task"]
+        out = await _dispatch(
+            step_agent,
+            task,
+            running_history,
+            campaign,
+            brand,
+            ctx,
+            shared_context,
+            current_user.id,
+            db,
+        )
+        agents_used.append(step_agent)
+
+        text = out.get("response") or out.get("error_message") or ""
+        if out.get("status") == "error":
+            overall_status = "error"
+            first_error = first_error or out.get("error_message")
+        if out.get("image_result"):
+            image_result = out["image_result"]
+        if out.get("video_result"):
+            video_result = out["video_result"]
+        if out.get("marketing_result"):
+            marketing_result = out["marketing_result"]
+
+        label = AGENT_LABELS.get(step_agent, step_agent.title())
+        parts.append(f"### {label}\n{text}" if multi else text)
+
+        running_history = [
+            *running_history,
+            {"role": "user", "content": task},
+            {"role": "assistant", "content": text},
+        ]
+
+    combined = "\n\n".join(p for p in parts if p.strip())
+    primary_agent = agents_used[0] if not multi else "orchestrator"
+    if multi:
+        agent_label = "Multiple agents (" + ", ".join(
+            AGENT_LABELS.get(a, a.title()) for a in agents_used
+        ) + ")"
+        reason = f"Ran {len(agents_used)} agents in sequence to fulfill the request."
+    else:
+        agent_label = AGENT_LABELS.get(primary_agent, primary_agent.title())
+        reason = f"Routed to {agent_label}."
 
     return OrchestratorAgentResponse(
-        status=output.get("status", "success"),
-        agent=agent,
-        agent_label=AGENT_LABELS.get(agent, agent.title()),
+        status=overall_status,
+        agent=primary_agent,
+        agent_label=agent_label,
         reason=reason,
-        response=output.get("response"),
-        error_message=output.get("error_message"),
-        image_result=output.get("image_result"),
-        video_result=output.get("video_result"),
+        response=combined or None,
+        error_message=first_error,
+        agents=agents_used,
+        suggestions=_followups(agents_used),
+        image_result=image_result,
+        video_result=video_result,
+        marketing_result=marketing_result,
     )
+
+
+_FOLLOWUPS = {
+    "content": [
+        "Generate an image to go with this",
+        "Turn this into a short video script",
+        "Schedule these posts on the calendar",
+    ],
+    "image": [
+        "Write a caption for this image",
+        "Create a video version",
+        "Generate 3 more variations",
+    ],
+    "video": [
+        "Write a caption for this video",
+        "Plan where and when to post it",
+        "Generate a thumbnail image",
+    ],
+    "marketing": [
+        "Open the calendar and review the schedule",
+        "Generate the first launch post",
+        "Create on-brand launch images",
+    ],
+    "calendar": [
+        "Generate content for these calendar slots",
+        "Rebalance the channel mix",
+        "Predict performance for this schedule",
+    ],
+    "analytics": [
+        "Suggest a budget reallocation",
+        "Find the weakest funnel step",
+        "Draft fixes for the gaps you found",
+    ],
+    "brand": [
+        "Create a brand voice guide",
+        "Generate on-brand images",
+        "Write 3 key brand messages",
+    ],
+    "chatbot": [
+        "Create a marketing plan",
+        "Generate a social post",
+        "Analyze campaign performance",
+    ],
+}
+
+
+def _followups(agents_used: list[str]) -> list[str]:
+    """Suggest next prompts based on the last agent that ran."""
+    last = agents_used[-1] if agents_used else "chatbot"
+    return _FOLLOWUPS.get(last, _FOLLOWUPS["chatbot"])
 
 
 def _recent_context(history: list[dict], limit: int = 6) -> str:
@@ -108,6 +218,7 @@ async def _dispatch(
     campaign: Campaign,
     brand: Brand | None,
     ctx: dict,
+    shared_context: str,
     user_id: int,
     db: AsyncSession,
 ) -> dict:
@@ -127,6 +238,7 @@ async def _dispatch(
             audience=ctx["audience"],
             campaign_name=ctx["campaign_name"],
             metrics_context=metrics_context,
+            shared_context=shared_context,
         )
 
     if agent == "calendar":
@@ -145,6 +257,7 @@ async def _dispatch(
             campaign_name=ctx["campaign_name"],
             campaign_notes=ctx["campaign_notes"],
             schedule_context=schedule_context,
+            shared_context=shared_context,
         )
 
     if agent == "brand":
@@ -160,6 +273,9 @@ async def _dispatch(
         from app.api.v1.agents.content import _map_tone
         from app.services.content_agent import run_content_agent
 
+        extra_notes = "\n\n".join(
+            part for part in [campaign.description, shared_context] if part
+        )
         request = ContentRequest(
             content_type="social_media_post",
             brand_name=ctx["brand_name"],
@@ -169,7 +285,7 @@ async def _dispatch(
             platform=None,
             topic_or_offer=_enrich(message, history),
             cta="Learn more",
-            extra_notes=campaign.description,
+            extra_notes=extra_notes,
         )
         try:
             content = await asyncio.to_thread(run_content_agent, request)
@@ -189,7 +305,7 @@ async def _dispatch(
         return await _run_video(message, campaign, brand)
 
     if agent == "marketing":
-        return await _run_marketing(message, campaign, brand, ctx)
+        return await _run_marketing(message, campaign, brand, ctx, db)
 
     # any general request: handle conversationally via the support chatbot.
     from app.services.chatbot_agent import run_chatbot
@@ -297,10 +413,20 @@ async def _run_video(message: str, campaign: Campaign, brand: Brand | None) -> d
 
 
 async def _run_marketing(
-    message: str, campaign: Campaign, brand: Brand | None, ctx: dict
+    message: str,
+    campaign: Campaign,
+    brand: Brand | None,
+    ctx: dict,
+    db: AsyncSession,
 ) -> dict:
+    from app.schemas.agents.marketing_agent import MarketingAgentResponse
+    from app.services.marketing_agent.calendar_sync import (
+        link_marketing_plan_to_campaign,
+    )
     from app.services.marketing_agent.marketing_agent import run_marketing_agent
 
+    platforms = ["Instagram", "Facebook", "LinkedIn"]
+    goal = message
     try:
         output = await asyncio.to_thread(
             run_marketing_agent,
@@ -308,11 +434,49 @@ async def _run_marketing(
             industry=ctx["industry"],
             product=campaign.name,
             audience=ctx["audience"],
-            goal=message,
+            goal=goal,
             budget=1000.0,
-            platforms=["Instagram", "Facebook", "LinkedIn"],
+            platforms=platforms,
         )
-        strategy = output.get("strategy") or "No strategy was produced."
-        return {"status": "success", "response": strategy, "error_message": None}
     except Exception as e:
         return {"status": "error", "response": None, "error_message": str(e)}
+
+    strategy_text = output.get("strategy") or ""
+    # Persist + seed the calendar, exactly like the dedicated marketing endpoint.
+    if (
+        output.get("status") == "success"
+        and strategy_text
+        and not strategy_text.startswith("Strategy generation failed:")
+    ):
+        try:
+            strategy_id, items_created = await link_marketing_plan_to_campaign(
+                db,
+                campaign=campaign,
+                brand_id=campaign.brand_id,
+                campaign_name=campaign.name,
+                goal=goal,
+                platforms=platforms,
+                strategy_text=strategy_text,
+                platform_insight=output.get("platform_insight"),
+                decision=output.get("decision"),
+            )
+            output["strategy_id"] = strategy_id
+            output["calendar_items_created"] = items_created
+            output["calendar_ready"] = items_created > 0
+        except Exception as e:
+            output["error_message"] = f"Strategy saved but calendar link failed: {str(e)}"
+
+    marketing_result = MarketingAgentResponse(**output)
+    response_text = strategy_text or "No strategy was produced."
+    if marketing_result.calendar_ready:
+        response_text = (
+            f"{response_text}\n\nI scheduled "
+            f"{marketing_result.calendar_items_created or 14} posts on your calendar. "
+            "Open Market Calendar to review them."
+        )
+    return {
+        "status": output.get("status", "success"),
+        "response": response_text,
+        "error_message": output.get("error_message"),
+        "marketing_result": marketing_result,
+    }

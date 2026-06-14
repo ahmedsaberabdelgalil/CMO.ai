@@ -68,5 +68,9 @@ class Settings(BaseSettings):
     POLLINATIONS_API_KEY: str = ""
     POLLINATIONS_MODEL: str = "flux"
 
+    # ── Observability (optional) ─────────────────────────────
+    SENTRY_DSN: str = ""
+    LOG_LEVEL: str = "INFO"
+
 
 settings = Settings()

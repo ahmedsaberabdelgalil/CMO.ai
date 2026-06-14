@@ -25,6 +25,7 @@ PROMPT = ChatPromptTemplate.from_messages(
         ),
         (
             "human",
+            "{shared_context}\n\n"
             "Campaign: {campaign_name}\n"
             "Brand: {brand_name}\n"
             "Industry: {industry}\n"
@@ -63,6 +64,7 @@ def run_analytics_agent(
     audience: str,
     campaign_name: str,
     metrics_context: str,
+    shared_context: str = "",
 ) -> dict:
     llm = _build_llm()
     if llm is None:
@@ -82,6 +84,7 @@ def run_analytics_agent(
                 "audience": audience or "General audience",
                 "campaign_name": campaign_name or "Campaign",
                 "metrics_context": metrics_context or "No metrics recorded yet.",
+                "shared_context": shared_context or "No additional campaign context.",
             }
         )
         return {

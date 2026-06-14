@@ -11,8 +11,17 @@ from app.models.user import User
 from app.schemas.agents.analytics_agent import AnalyticsAgentRequest, AnalyticsAgentResponse
 from app.services.analytics_agent.analytics_agent import run_analytics_agent
 from app.services import performance_service
+from app.services.campaign_context import build_campaign_context
 
 router = APIRouter(prefix="/agents/analytics", tags=["Analytics Agent"])
+
+FOCUS_PROMPTS = {
+    "overall": "Summarize overall marketing performance for this campaign and the top priorities.",
+    "funnel": "Find the weakest step in the marketing funnel and explain why, with a fix.",
+    "budget": "Recommend how to reallocate budget across channels based on current performance.",
+    "channels": "Compare channel performance and say which channels to scale or cut.",
+    "audience": "Analyze how well the content is reaching and converting the target audience.",
+}
 
 
 async def _build_metrics_context(user_id: int, db: AsyncSession) -> str:
@@ -40,6 +49,14 @@ async def _build_metrics_context(user_id: int, db: AsyncSession) -> str:
     return "\n".join(lines)
 
 
+def _manual_metrics_context(metrics: dict[str, float]) -> str:
+    lines = ["Manually provided metrics:"]
+    for key, value in metrics.items():
+        label = key.replace("_", " ").capitalize()
+        lines.append(f"  {label}: {value}")
+    return "\n".join(lines)
+
+
 @router.post("/generate", response_model=AnalyticsAgentResponse)
 async def generate_analytics_insight(
     data: AnalyticsAgentRequest,
@@ -54,11 +71,26 @@ async def generate_analytics_insight(
     brand_result = await db.execute(select(Brand).where(Brand.id == campaign.brand_id))
     brand = brand_result.scalar_one_or_none()
 
-    metrics_context = await _build_metrics_context(current_user.id, db)
+    # Build the analysis task from a preset focus and/or a free-text question.
+    message = (data.message or "").strip()
+    if data.focus:
+        focus_prompt = FOCUS_PROMPTS.get(data.focus.strip().lower())
+        if focus_prompt:
+            message = f"{focus_prompt} {message}".strip()
+    if not message:
+        message = FOCUS_PROMPTS["overall"]
+
+    # Use manually entered metrics when provided, else the stored campaign metrics.
+    if data.metrics:
+        metrics_context = _manual_metrics_context(data.metrics)
+    else:
+        metrics_context = await _build_metrics_context(current_user.id, db)
+
+    shared_context = await build_campaign_context(db, campaign, brand)
 
     output = await asyncio.to_thread(
         run_analytics_agent,
-        message=data.message,
+        message=message,
         brand_name=brand.brand_name if brand else "Brand",
         industry=brand.industry if brand and brand.industry else "General",
         audience=(
@@ -66,6 +98,7 @@ async def generate_analytics_insight(
         ),
         campaign_name=campaign.name,
         metrics_context=metrics_context,
+        shared_context=shared_context,
     )
 
     return AnalyticsAgentResponse(**output)

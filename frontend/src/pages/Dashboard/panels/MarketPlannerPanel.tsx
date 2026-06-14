@@ -42,6 +42,7 @@ export function MarketPlannerPanel({
   lastResult,
   onGenerate,
   onOpenCalendar,
+  onExport,
 }: {
   campaign: CampaignOut;
   brand: BrandOut | null;
@@ -50,6 +51,7 @@ export function MarketPlannerPanel({
   lastResult: MarketingAgentResponse | null;
   onGenerate: (form: PlannerFormState, message: string) => void;
   onOpenCalendar: () => void;
+  onExport: () => void;
 }) {
   const initialForm = useMemo<PlannerFormState>(
     () => ({
@@ -290,6 +292,19 @@ export function MarketPlannerPanel({
                 onClick={onOpenCalendar}
               >
                 Open Calendar
+              </Button>
+            ) : null}
+            {lastResult?.strategy && !isGenerating ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="text-white border-white/20 bg-white/5 hover:bg-white/10"
+                onClick={onExport}
+                disabled={busyAction === "marketexport"}
+              >
+                {busyAction === "marketexport"
+                  ? "Preparing…"
+                  : "Download plan (Word)"}
               </Button>
             ) : null}
           </div>

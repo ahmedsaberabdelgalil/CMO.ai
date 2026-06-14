@@ -19,12 +19,17 @@ import { deleteCampaign } from "../../services/campaignService";
 import { deleteBrand, getBrands} from "../../services/brandService";
 import { useCampaign } from "../../hooks/useCampaign";
 import { listAssets } from "../../services/assetsService";
-import { generateCalendarInsight } from "../../services/calendarAgentService";
+import {
+  applyCalendarPlan,
+  generateCalendarInsight,
+} from "../../services/calendarAgentService";
+import { exportDocx, exportMarketingPlan } from "../../services/exportService";
 import { generateAnalyticsInsight } from "../../services/analyticsAgentService";
 import {
   generateBrandCoaching,
   generateBrandReport,
   saveBrandProfile,
+  saveStructuredBrandProfile,
 } from "../../services/brandAgentService";
 import { orchestrate } from "../../services/orchestratorAgentService";
 import {
@@ -32,10 +37,10 @@ import {
   getContentAgentStatus,
 } from "../../services/contentAgentService";
 import {
-  generateImage,
+  generateImageAsync,
   getImageAgentStatus,
 } from "../../services/imageAgentService";
-import { generateVideo } from "../../services/videoAgentService";
+import { generateVideoAsync } from "../../services/videoAgentService";
 import { generateMarketingStrategy } from "../../services/marketingAgentService";
 import type {
   BrandOut,
@@ -69,6 +74,7 @@ import { OrchestratorPanel } from "./panels/OrchestratorPanel";
 import { MarketPlannerPanel } from "./panels/MarketPlannerPanel";
 import type { PlannerFormState } from "./panels/MarketPlannerPanel";
 import { BrandPanels } from "./panels/BrandPanels";
+import type { BrandProfileForm } from "./panels/BrandPanels";
 import { CalendarPanels } from "./panels/CalendarPanels";
 import { TextPanels } from "./panels/TextPanels";
 import { ImagePanels } from "./panels/ImagePanels";
@@ -179,6 +185,7 @@ export default function Dashboard() {
     },
   ]);
   const [brandDraft, setBrandDraft] = useState("");
+  const [brandPromptOptions, setBrandPromptOptions] = useState<string[]>([]);
   const [orchestratorChatMessages, setOrchestratorChatMessages] = useState<
     ChatMessage[]
   >([
@@ -188,6 +195,9 @@ export default function Dashboard() {
     },
   ]);
   const [orchestratorDraft, setOrchestratorDraft] = useState("");
+  const [orchestratorFollowups, setOrchestratorFollowups] = useState<string[]>(
+    [],
+  );
   const filteredCampaigns = useMemo(() => {
     if (selectedBrandId === "all") return campaigns;
 
@@ -615,6 +625,46 @@ export default function Dashboard() {
     [runMarketingGenerate],
   );
 
+  const handleBrandReportExport = useCallback(async () => {
+    const lastAssistant = [...brandChatMessages]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    if (!lastAssistant) {
+      showResult("Nothing to export", "Generate a brand report first.");
+      return;
+    }
+    setBusyAction("brandexport");
+    try {
+      await exportDocx({
+        title: `Brand Report — ${dashboardBrand?.brand_name ?? "Brand"}`,
+        content: lastAssistant.text,
+        subtitle: dashboardCampaign?.name,
+        filename: "brand_report",
+      });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Export failed";
+      showResult("Export failed", err);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [brandChatMessages, dashboardBrand, dashboardCampaign, showResult]);
+
+  const handleMarketExport = useCallback(async () => {
+    if (!dashboardCampaign) return;
+    setBusyAction("marketexport");
+    try {
+      await exportMarketingPlan(
+        dashboardCampaign.id,
+        `marketing_plan_${dashboardCampaign.name}`,
+      );
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Export failed";
+      showResult("Export failed", err);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [dashboardCampaign, showResult]);
+
   const handleMarketQuickAction = useCallback(
     (message: string) => {
       void runMarketingGenerate(message, "marketchat", {
@@ -710,6 +760,54 @@ export default function Dashboard() {
     [calendarDraft, runCalendarAgent],
   );
 
+  const handleCalendarApply = useCallback(
+    async (message = "") => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before generating a schedule.",
+        );
+        return;
+      }
+
+      setBusyAction("calapply");
+      try {
+        const res = await applyCalendarPlan({
+          campaign_id: dashboardCampaign.id,
+          message,
+          days: 14,
+        });
+        if (res.status === "success") {
+          await refreshCampaign();
+          setCalendarChatMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              text:
+                res.response ??
+                `Scheduled ${res.items_created} posts on your calendar.`,
+            },
+          ]);
+          showResult(
+            "Calendar updated",
+            res.response ?? `Created ${res.items_created} posts.`,
+          );
+        } else {
+          showResult(
+            "Could not update calendar",
+            res.error_message ?? "Try again.",
+          );
+        }
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, refreshCampaign, showResult],
+  );
+
   const runAnalyticsAgent = useCallback(
     async (message: string, busyKey: string) => {
       if (!dashboardCampaign) {
@@ -785,6 +883,66 @@ export default function Dashboard() {
       void runAnalyticsAgent(trimmed, "analychat");
     },
     [analyticsDraft, runAnalyticsAgent],
+  );
+
+  const handleAnalyticsRun = useCallback(
+    async (
+      focus: string,
+      metrics: Record<string, number> | null,
+      question: string,
+    ) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before running analytics.",
+        );
+        return;
+      }
+
+      const focusLabels: Record<string, string> = {
+        overall: "Summarize overall performance",
+        funnel: "Find the weakest funnel step",
+        budget: "Recommend a budget reallocation",
+        channels: "Compare channel performance",
+        audience: "Analyze audience reach and conversion",
+      };
+      const userText =
+        question || focusLabels[focus] || "Run a performance analysis";
+
+      setBusyAction("analyrun");
+      setAnalyticsChatMessages((prev) => [
+        ...prev,
+        { role: "user", text: userText },
+      ]);
+
+      try {
+        const res = await generateAnalyticsInsight({
+          campaign_id: dashboardCampaign.id,
+          focus,
+          metrics,
+          message: question,
+        });
+        setAnalyticsLastResult(res);
+        const text =
+          res.error_message ||
+          res.response ||
+          "Analytics agent did not return a response.";
+        setAnalyticsChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text },
+        ]);
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        setAnalyticsChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: err },
+        ]);
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, showResult],
   );
 
   const runBrandCoaching = useCallback(
@@ -913,6 +1071,51 @@ export default function Dashboard() {
     }
   }, [dashboardCampaign, brandChatMessages, refreshCampaign, showResult]);
 
+  const handleBrandProfileSave = useCallback(
+    async (form: BrandProfileForm) => {
+      if (!dashboardCampaign) {
+        showResult(
+          "Select a campaign",
+          "Choose a campaign before saving a brand profile.",
+        );
+        return;
+      }
+
+      setBusyAction("brandprofile");
+      try {
+        const res = await saveStructuredBrandProfile({
+          campaign_id: dashboardCampaign.id,
+          brand_name: form.brandName,
+          industry: form.industry,
+          target_audience: form.targetAudience,
+          value_proposition: form.valueProposition,
+          tone_of_voice: form.toneOfVoice,
+          positioning: form.positioning,
+        });
+
+        if (res.status === "success") {
+          setBrandPromptOptions(res.suggestions ?? []);
+          await refreshCampaign();
+          void getBrands()
+            .then(setBrands)
+            .catch((error) => console.error(error));
+          showResult(
+            "Brand profile saved",
+            res.response ?? "Your brand profile is now shared with every agent.",
+          );
+        } else {
+          showResult("Could not save", res.error_message ?? "Try again.");
+        }
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Something went wrong";
+        showResult("Error", err);
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [dashboardCampaign, refreshCampaign, showResult],
+  );
+
   const runOrchestrator = useCallback(
     async (message: string, busyKey: string) => {
       if (!dashboardCampaign) {
@@ -958,6 +1161,13 @@ export default function Dashboard() {
         if (res.video_result) {
           setVideoLastResult(res.video_result);
         }
+        if (res.marketing_result) {
+          setMarketingLastResult(res.marketing_result);
+          if (res.marketing_result.calendar_ready) {
+            await refreshCampaign();
+          }
+        }
+        setOrchestratorFollowups(res.suggestions ?? []);
 
         setOrchestratorChatMessages((prev) => [
           ...prev,
@@ -979,7 +1189,7 @@ export default function Dashboard() {
         setBusyAction(null);
       }
     },
-    [dashboardCampaign, orchestratorChatMessages, showResult],
+    [dashboardCampaign, orchestratorChatMessages, refreshCampaign, showResult],
   );
 
   const handleOrchestratorChatSend = useCallback(
@@ -1104,7 +1314,7 @@ export default function Dashboard() {
       ]);
 
       try {
-        const res = await generateImage({
+        const res = await generateImageAsync({
           message,
           campaign_id: dashboardCampaign.id,
           platform,
@@ -1205,7 +1415,7 @@ export default function Dashboard() {
       ]);
 
       try {
-        const res = await generateVideo({
+        const res = await generateVideoAsync({
           message,
           campaign_id: dashboardCampaign.id,
         });
@@ -1748,16 +1958,17 @@ export default function Dashboard() {
                       lastResult={marketingLastResult}
                       onGenerate={handleMarketGenerate}
                       onOpenCalendar={() => setActiveAgentId("calendar")}
+                      onExport={handleMarketExport}
                     />
                   ) : activeAgentId === "brand" ? (
                     <BrandPanels
                       campaign={dashboardCampaign}
+                      brand={dashboardBrand}
                       brandAudience={dashboardBrandAudience}
-                      messages={brandChatMessages}
                       busyAction={busyAction}
-                      onQuickAction={handleBrandChatSend}
-                      onReport={handleBrandReport}
-                      onSaveProfile={handleBrandSaveProfile}
+                      suggestions={brandPromptOptions}
+                      onSaveProfile={handleBrandProfileSave}
+                      onPromptSelect={handleBrandChatSend}
                     />
                   ) : activeAgentId === "calendar" ? (
                     <CalendarPanels
@@ -1767,6 +1978,7 @@ export default function Dashboard() {
                       onPlan14={handleCalendarPlan14}
                       onBalance={handleCalendarBalance}
                       onFindGaps={handleCalendarFindGaps}
+                      onApply={handleCalendarApply}
                     />
                   ) : activeAgentId === "text" ? (
                     <TextPanels
@@ -1806,9 +2018,7 @@ export default function Dashboard() {
                       busyAction={busyAction}
                       lastResult={analyticsLastResult}
                       messages={analyticsChatMessages}
-                      onSummarize={handleAnalyticsSummarize}
-                      onWeakFunnel={handleAnalyticsWeakFunnel}
-                      onBudgetShift={handleAnalyticsBudgetShift}
+                      onRunAnalysis={handleAnalyticsRun}
                     />
                   )}
                 </>
@@ -1829,6 +2039,7 @@ export default function Dashboard() {
               onDemoAction={handleDemoAgentAction}
               orchestratorChatMessages={orchestratorChatMessages}
               orchestratorDraft={orchestratorDraft}
+              orchestratorFollowups={orchestratorFollowups}
               onOrchestratorDraftChange={setOrchestratorDraft}
               onOrchestratorChatSend={handleOrchestratorChatSend}
               brandChatMessages={brandChatMessages}
@@ -1836,6 +2047,7 @@ export default function Dashboard() {
               onBrandDraftChange={setBrandDraft}
               onBrandChatSend={handleBrandChatSend}
               onBrandReport={handleBrandReport}
+              onBrandReportExport={handleBrandReportExport}
               onBrandSaveProfile={handleBrandSaveProfile}
               onCalendarPlan14={handleCalendarPlan14}
               onCalendarBalance={handleCalendarBalance}
